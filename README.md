@@ -29,8 +29,7 @@ statements:
 
 Moreover, While* programs can contain pre-conditions and post-conditions. WVM implements an
 interpreter, a type checker, and a Hoare proof system based on weakest precondition transformers.
-The visual While* interpreter (WiZ) additionally provides a visual debugger for While\* programs
-[0].
+[The visual While* interpreter](https://wiz.cs.tu-dortmund.de) (WiZ) additionally provides a visual debugger for While\* programs.
 
 ## Example
 
@@ -69,7 +68,3 @@ $ <wvmfolder>/bin/wvm <filename.w>
 ```
 
 Use argument `--help` to see a list of command-line parameters.
-
-## References
-
-- [0](https://wiz.cs.tu-dortmund.de)
