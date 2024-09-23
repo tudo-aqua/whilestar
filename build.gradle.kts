@@ -41,7 +41,7 @@ plugins {
 
 group = "tools.aqua"
 
-version = "1.0-SNAPSHOT"
+version = "0.2"
 
 repositories { mavenCentral() }
 
