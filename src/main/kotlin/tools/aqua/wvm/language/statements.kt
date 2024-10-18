@@ -185,7 +185,15 @@ data class While(
             Transition(
                 cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
 
-    return if (cond.result && invar.result)
+    if (!invar.result)
+        return WhInvar(
+            cond as BooleanExpressionOk,
+            invar as BooleanExpressionOk,
+            this,
+            Transition(
+                cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
+
+    return if (cond.result)
         WhTrue(
             cond as BooleanExpressionOk,
             invar as BooleanExpressionOk,
@@ -195,13 +203,6 @@ data class While(
                 dst =
                     Configuration(
                         concat(body.statements, cfg.statements.statements), cfg.scope, cfg.memory)))
-    else if (cond.result && !invar.result)
-	WhInvar(
-            cond as BooleanExpressionOk,
-            invar as BooleanExpressionOk,
-            this,
-            Transition(
-                cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))	
     else
         WhFalse(
             cond as BooleanExpressionOk,
