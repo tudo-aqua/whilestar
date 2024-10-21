@@ -363,14 +363,6 @@ data class Not(val negated: BooleanExpression) : BooleanExpression {
   override fun toString(): String = "(not $negated)"
 }
 
-data class Forall(val boundVar: Variable, val expression: BooleanExpression) : BooleanExpression {
-  override fun evaluate(scope: Scope, memory: Memory): Application<Boolean> {
-    throw Exception("forall is not meant to be evaluated.")
-  }
-
-  override fun toString(): String = "∀$boundVar. ($expression)"
-}
-
 object True : BooleanExpression {
   override fun evaluate(scope: Scope, memory: Memory): BooleanExpressionApp = TrueOk(this)
 
@@ -381,4 +373,41 @@ object False : BooleanExpression {
   override fun evaluate(scope: Scope, memory: Memory): BooleanExpressionApp = FalseOk(this)
 
   override fun toString(): String = "false"
+}
+
+// --------------------------------------------------------------------
+// Verification Expressions
+
+data class Forall(val boundVar: Variable, val expression: BooleanExpression) : BooleanExpression {
+    override fun evaluate(scope: Scope, memory: Memory): Application<Boolean> {
+        throw Exception("forall is not meant to be evaluated.")
+    }
+
+    override fun toString(): String = "∀$boundVar. ($expression)"
+}
+
+sealed interface ArrayExpression : AddressExpression
+
+object AnyArray : ArrayExpression {
+    override fun evaluate(scope: Scope, memory: Memory): Application<Int> {
+        throw Exception("array is not meant to be evaluated.")
+    }
+
+    override fun toString(): String = "M"
+}
+
+data class ArrayRead(val array:ArrayExpression, val index:ArithmeticExpression) : ArrayExpression {
+    override fun evaluate(scope: Scope, memory: Memory): Application<Int> {
+        throw Exception("array read is not meant to be evaluated.")
+    }
+
+    override fun toString(): String = "$array[$index]"
+}
+
+data class ArrayWrite(val array:ArrayExpression, val index:ArithmeticExpression, val value:ArithmeticExpression) : ArrayExpression {
+    override fun evaluate(scope: Scope, memory: Memory): Application<Int> {
+        throw Exception("array write is not meant to be evaluated.")
+    }
+
+    override fun toString(): String = "$array<$index <| $value>"
 }
