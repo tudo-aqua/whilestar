@@ -28,6 +28,7 @@ class AddressTypeReconstruction(private val ctx: Scope) {
         is Variable -> ctx.type(addr.name)
         is DeRef -> deref(typeOf(addr.reference))
         is ArrayAccess -> deref(typeOf(addr.array.addr))
+        else -> throw Exception("fixme")
       }
 
   fun deref(type: Type) =
@@ -135,6 +136,7 @@ class ExpressionTypeReconstruction(private val ctx: Scope) {
       is Variable -> typeOf(exp)
       is ArrayAccess -> typeOf(exp)
       is DeRef -> typeOf(exp)
+      else -> throw Exception("fixme")
     }
   }
 
@@ -149,6 +151,7 @@ class ExpressionTypeReconstruction(private val ctx: Scope) {
       is Rem -> typeOf(exp)
       is UnaryMinus -> typeOf(exp)
       is ValAtAddr -> typeOf(exp)
+      else -> throw Exception("fixme")
     }
     throw NotImplementedError("typeOf not implemented for $exp")
   }
