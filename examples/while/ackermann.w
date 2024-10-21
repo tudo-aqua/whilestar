@@ -1,9 +1,9 @@
 vars:
-  int[10] k;
-  int[10] n;
+  int[100] k;
+  int[100] n;
   int i;
   int recDepth;
-  int[10] a;
+  int[100] a;
 code:
   i := 0;
   while(i < 10) {
@@ -13,6 +13,7 @@ code:
     i := i + 1;
   };
   extern i 0..10;
+  print "in:", i;
   k[0] := i;
   n[0] := i;
   recDepth := 1;
@@ -56,4 +57,4 @@ code:
     } else {
     };
   };
-  print "", a[0];
+  print "out:", a[0];
