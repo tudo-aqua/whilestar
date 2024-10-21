@@ -299,6 +299,13 @@ class TypeChecker(private val ctx: Scope) {
     return SwapPrf(ctx, stmt, type, prfL, prfR)
   }
 
+  fun typeOf(stmt: Assertion): AssertPrf {
+    val type = BasicType.UNIT
+    val prfCond = exprTypes.typeOf(stmt.cond)
+    return AssertPrf(ctx, stmt, type, prfCond)
+  }
+
+
   fun typeOf(stmts: SequenceOfStatements): SequenceOfStatementsPrf {
     val type = BasicType.UNIT
     val prfs = stmts.statements.map { typeOf(it) }
@@ -343,6 +350,7 @@ class TypeChecker(private val ctx: Scope) {
     when (stmt) {
       is Assignment -> return typeOf(stmt)
       is Swap -> return typeOf(stmt)
+      is Assertion -> return typeOf(stmt)
       is Havoc -> return typeOf(stmt)
       is IfThenElse -> return typeOf(stmt)
       is While -> return typeOf(stmt)

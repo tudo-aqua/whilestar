@@ -51,6 +51,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
                     "Leaving loop with invariant ${stmt.invariant}")) +
                 vcgen(stmt.body, stmt.invariant)
         is IfThenElse -> vcgen(stmt.thenBlock, post) + vcgen(stmt.elseBlock, post)
+	is Assertion -> listOf(Entailment(stmt.cond, post, "Following assertion"))
         else -> emptyList()
       }
 
@@ -71,6 +72,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
                 Imply(Not(stmt.cond), wpc(stmt.elseBlock, post)))
         is Assignment -> wpc(stmt, post)
         is Swap -> wpc(stmt, post)
+	is Assertion -> stmt.cond
         is Print -> post
         is Fail -> True
         is Havoc -> wpc(stmt, post)
