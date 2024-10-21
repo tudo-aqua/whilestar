@@ -27,91 +27,135 @@ import tools.aqua.wvm.machine.Scope
 
 class WPCProofSystem(val context: Context, val output: Output) {
 
-  private var uniqueId = 0
+    private var uniqueId = 0
 
-  private fun vcgen(
-      pre: BooleanExpression,
-      program: List<Statement>,
-      post: BooleanExpression
-  ): List<Entailment> =
-      listOf(Entailment(pre, wpc(SequenceOfStatements(program), post), "Precondition")) +
-          vcgen(SequenceOfStatements(program), post)
+    private fun vcgen(
+        pre: BooleanExpression,
+        program: List<Statement>,
+        post: BooleanExpression
+    ): List<Entailment> =
+        listOf(Entailment(pre, wpc(SequenceOfStatements(program), post), "Precondition")) +
+                vcgen(SequenceOfStatements(program), post)
 
-  private fun vcgen(stmt: Statement, post: BooleanExpression): List<Entailment> =
-      when (stmt) {
-        is While ->
-            listOf(
-                Entailment(
-                    And(stmt.invariant, stmt.head),
-                    wpc(stmt.body, stmt.invariant),
-                    "Entering loop with invariant ${stmt.invariant}"),
-                Entailment(
-                    And(stmt.invariant, Not(stmt.head)),
-                    post,
-                    "Leaving loop with invariant ${stmt.invariant}")) +
-                vcgen(stmt.body, stmt.invariant)
-        is IfThenElse -> vcgen(stmt.thenBlock, post) + vcgen(stmt.elseBlock, post)
-        else -> emptyList()
-      }
+    private fun vcgen(stmt: Statement, post: BooleanExpression): List<Entailment> =
+        when (stmt) {
+            is While ->
+                listOf(
+                    Entailment(
+                        And(prepare(stmt.invariant), prepare(stmt.head)),
+                        wpc(stmt.body, prepare(stmt.invariant)),
+                        "Entering loop with invariant ${stmt.invariant}"
+                    ),
+                    Entailment(
+                        And(prepare(stmt.invariant), prepare(Not(stmt.head))),
+                        post,
+                        "Leaving loop with invariant ${stmt.invariant}"
+                    )
+                ) +
+                        vcgen(stmt.body, prepare(stmt.invariant))
 
-  private fun vcgen(stmt: SequenceOfStatements, post: BooleanExpression): List<Entailment> =
-      if (stmt.isExhausted()) emptyList()
-      else {
-        val last = stmt.end()
-        val wpc = wpc(last, post)
-        vcgen(last, post) + vcgen(SequenceOfStatements(stmt.front()), wpc)
-      }
+            is IfThenElse -> vcgen(stmt.thenBlock, post) + vcgen(stmt.elseBlock, post)
+            else -> emptyList()
+        }
 
-  private fun wpc(stmt: Statement, post: BooleanExpression): BooleanExpression =
-      when (stmt) {
-        is While -> stmt.invariant
-        is IfThenElse ->
-            And(
-                Imply(stmt.cond, wpc(stmt.thenBlock, post)),
-                Imply(Not(stmt.cond), wpc(stmt.elseBlock, post)))
-        is Assignment -> wpc(stmt, post)
-        is Swap -> wpc(stmt, post)
-        is Print -> post
-        is Fail -> True
-        is Havoc -> wpc(stmt, post)
-      }
+    private fun vcgen(stmt: SequenceOfStatements, post: BooleanExpression): List<Entailment> =
+        if (stmt.isExhausted()) emptyList()
+        else {
+            val last = stmt.end()
+            val wpc = wpc(last, post)
+            vcgen(last, post) + vcgen(SequenceOfStatements(stmt.front()), wpc)
+        }
 
-  private fun wpc(stmt: Assignment, post: BooleanExpression): BooleanExpression =
-      when (stmt.addr) {
-        is Variable -> replace(post, stmt.addr, stmt.expr)
-        else -> throw Exception("expression (${stmt.addr}) not supported by proof system.")
-      }
+    private fun wpc(stmt: Statement, post: BooleanExpression): BooleanExpression =
+        when (stmt) {
+            is While -> prepare(stmt.invariant)
+            is IfThenElse ->
+                And(
+                    Imply(prepare(stmt.cond), wpc(stmt.thenBlock, post)),
+                    Imply(Not(prepare(stmt.cond)), wpc(stmt.elseBlock, post))
+                )
 
-  private fun wpc(stmt: Swap, post: BooleanExpression): BooleanExpression {
-    if (stmt.left !is Variable) {
-      throw Exception("expression (${stmt.left}) not supported by proof system.")
+            is Assignment -> wpc(stmt, post)
+            is Swap -> wpc(stmt, post)
+            is Print -> post
+            is Fail -> True
+            is Havoc -> wpc(stmt, post)
+        }
+
+    private fun wpc(stmt: Assignment, post: BooleanExpression): BooleanExpression = when (stmt.addr) {
+        is Variable -> replace(post, stmt.addr, prepare(stmt.expr))
+        is DeRef -> replaceM(post, ArrayWrite(AnyArray, ValAtAddr(prepare(stmt.addr.reference)), prepare(stmt.expr)))
+        is ArrayAccess -> replaceM(
+            post,
+            ArrayWrite(AnyArray, Add(prepare(stmt.addr.array), prepare(stmt.addr.index)), prepare(stmt.expr))
+        )
+
+        else -> throw Exception("this case is not supposed to be reachable: replaceM wpc of $stmt")
     }
-    if (stmt.right !is Variable) {
-      throw Exception("expression (${stmt.right}) not supported by proof system.")
+
+    private fun wpc(stmt: Swap, post: BooleanExpression): BooleanExpression {
+        val tVar = Variable("tmp_${uniqueId++}")
+        val leftToTmp = Assignment(tVar, ValAtAddr(stmt.left))
+        val rightToLeft = Assignment(stmt.left, ValAtAddr(stmt.right))
+        val tmpToRight = Assignment(stmt.right, ValAtAddr(tVar))
+        return wpc(leftToTmp, wpc(rightToLeft, wpc(tmpToRight, post)))
     }
-    val tVar = Variable("****") // no real variable can have this name
-    val temp1 = replace(post, stmt.left, ValAtAddr(tVar))
-    val temp2 = replace(temp1, stmt.right, ValAtAddr(stmt.left))
-    return replace(temp2, tVar, ValAtAddr(stmt.right))
+
+    private fun wpc(stmt: Havoc, post: BooleanExpression): BooleanExpression {
+        val boundVar = Variable("ext_${uniqueId++}") // TODO: truly unique variable names!
+        val wpcInner = when (stmt.addr) {
+            is Variable -> replace(post, stmt.addr, ValAtAddr(boundVar))
+            is DeRef -> replaceM(
+                post,
+                ArrayWrite(AnyArray, ValAtAddr(prepare(stmt.addr.reference)), ValAtAddr(boundVar))
+            )
+
+            is ArrayAccess -> replaceM(
+                post,
+                ArrayWrite(AnyArray, Add(prepare(stmt.addr.array), prepare(stmt.addr.index)), ValAtAddr(boundVar))
+            )
+
+            else -> throw Exception("this case is not supposed to be reachable: replaceM wpc of $stmt")
+        }
+        return Forall(
+            boundVar, Or(
+                Or(
+                    Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
+                    Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper))
+                ), wpcInner
+            )
+        )
+    }
+
+    private fun wpc(stmt: SequenceOfStatements, post: BooleanExpression): BooleanExpression {
+        println(post)
+    return if (stmt.isExhausted()) post
+    else wpc(SequenceOfStatements(stmt.front()), wpc(stmt.end(), post))
+    }
+
+  // {Q[M(y) / x]} x := *y; {Q}
+  private fun prepare(phi: AddressExpression) : AddressExpression =
+    when (phi) {
+      is Variable -> phi
+      is DeRef -> ArrayRead(AnyArray, ValAtAddr(prepare(phi.reference)))
+      is ArrayAccess -> ArrayRead(AnyArray, Add(prepare(phi.array), prepare(phi.index)))
+      // we introduce array expressions only in the wpc, other case cannot occur
+      else -> throw Exception("this case should not occur.")
+      //is ArrayWrite -> ValAtAddr(ArrayWrite(phi.array, replace(phi.index, v, replacement), replace(phi.value, v, replacement)))
+      //is AnyArray -> throw Exception("this case should not occur.")
   }
 
-  private fun wpc(stmt: Havoc, post: BooleanExpression): BooleanExpression {
-    if (stmt.addr !is Variable) {
-      throw Exception("expression (${stmt.addr}) not supported by proof system.")
-    }
-    val boundVar = Variable("${stmt.addr}${uniqueId++}")
-    return Forall(
-        boundVar,
-        Or(
-            Or(
-                Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
-                Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper))),
-            replace(post, stmt.addr, ValAtAddr(boundVar))))
-  }
-
-  private fun wpc(stmt: SequenceOfStatements, post: BooleanExpression): BooleanExpression =
-      if (stmt.isExhausted()) post
-      else wpc(SequenceOfStatements(stmt.front()), wpc(stmt.end(), post))
+  // {Q[M<x <| e> / M]} *x := e; {Q}
+  private fun replaceM(phi: AddressExpression, write:ArrayWrite) : AddressExpression =
+      when (phi) {
+          is Variable -> phi
+          is ArrayRead -> ArrayRead(replaceM(phi.array, write) as ArrayExpression, replaceM(phi.index, write))
+          is ArrayWrite -> ArrayWrite(replaceM(phi.array, write) as ArrayExpression,
+              replaceM(phi.index, write), replaceM(phi.value, write))
+          is AnyArray -> ArrayWrite(write.array, write.index, write.value)
+          // the other cases should not exist after prepare
+          else -> throw Exception("this case is not supposed to be reachable: replaceM in $phi")
+      }
 
   private fun replace(
       phi: ArithmeticExpression,
@@ -129,6 +173,31 @@ class WPCProofSystem(val context: Context, val output: Output) {
         is Rem -> Rem(replace(phi.left, v, replacement), replace(phi.right, v, replacement))
         is VarAddress -> throw Exception("expression ($phi) not supported by proof system.")
       }
+
+  private fun replaceM(phi: ArithmeticExpression, write: ArrayWrite) : ArithmeticExpression =
+      when (phi) {
+          is ValAtAddr -> ValAtAddr(replaceM(phi.addr, write))
+          is NumericLiteral -> NumericLiteral(phi.literal)
+          is UnaryMinus -> UnaryMinus(replaceM(phi.negated, write))
+          is Add -> Add(replaceM(phi.left, write), replaceM(phi.right, write))
+          is Sub -> Sub(replaceM(phi.left, write), replaceM(phi.right, write))
+          is Mul -> Mul(replaceM(phi.left, write), replaceM(phi.right, write))
+          is Div -> Div(replaceM(phi.left, write), replaceM(phi.right, write))
+          is Rem -> Rem(replaceM(phi.left, write), replaceM(phi.right, write))
+          is VarAddress -> throw Exception("expression ($phi) not supported by proof system.")
+      }
+
+  private fun prepare(phi: ArithmeticExpression) : ArithmeticExpression = when (phi) {
+      is ValAtAddr -> ValAtAddr(prepare(phi.addr))
+      is NumericLiteral -> NumericLiteral(phi.literal)
+      is UnaryMinus -> UnaryMinus(prepare(phi.negated))
+      is Add -> Add(prepare(phi.left), prepare(phi.right))
+      is Sub -> Sub(prepare(phi.left), prepare(phi.right))
+      is Mul -> Mul(prepare(phi.left), prepare(phi.right))
+      is Div -> Div(prepare(phi.left), prepare(phi.right))
+      is Rem -> Rem(prepare(phi.left), prepare(phi.right))
+      is VarAddress -> throw Exception("expression ($phi) not supported by proof system.")
+    }
 
   private fun replace(
       phi: BooleanExpression,
@@ -153,18 +222,68 @@ class WPCProofSystem(val context: Context, val output: Output) {
         is Forall -> Forall(phi.boundVar, replace(phi.expression, v, replacement))
       }
 
+    private fun replaceM(phi: BooleanExpression, write: ArrayWrite) : BooleanExpression =
+        when (phi) {
+            is True -> phi
+            is False -> phi
+            is Not -> Not(replaceM(phi.negated, write))
+            is Eq ->
+                Eq(replaceM(phi.left, write), replaceM(phi.right, write), phi.nesting)
+
+            is Gt -> Gt(replaceM(phi.left, write), replaceM(phi.right, write))
+            is Gte -> Gte(replaceM(phi.left, write), replaceM(phi.right, write))
+            is Lt -> Lt(replaceM(phi.left, write), replaceM(phi.right, write))
+            is Lte -> Lte(replaceM(phi.left, write), replaceM(phi.right, write))
+            is And -> And(replaceM(phi.left, write), replaceM(phi.right, write))
+            is Equiv -> Equiv(replaceM(phi.left, write), replaceM(phi.right, write))
+            is Imply -> Imply(replaceM(phi.left, write), replaceM(phi.right, write))
+            is Or -> Or(replaceM(phi.left, write), replaceM(phi.right, write))
+            // since bound vars are never program vars, we only need to replace on expression
+            is Forall -> Forall(phi.boundVar, replaceM(phi.expression, write))
+        }
+
+    private fun prepare(phi: BooleanExpression) : BooleanExpression =
+        when (phi) {
+            is True -> phi
+            is False -> phi
+            is Not -> Not(prepare(phi.negated))
+            is Eq ->
+                Eq(prepare(phi.left), prepare(phi.right), phi.nesting)
+
+            is Gt -> Gt(prepare(phi.left), prepare(phi.right))
+            is Gte -> Gte(prepare(phi.left), prepare(phi.right))
+            is Lt -> Lt(prepare(phi.left), prepare(phi.right))
+            is Lte -> Lte(prepare(phi.left), prepare(phi.right))
+            is And -> And(prepare(phi.left), prepare(phi.right))
+            is Equiv -> Equiv(prepare(phi.left), prepare(phi.right))
+            is Imply -> Imply(prepare(phi.left), prepare(phi.right))
+            is Or -> Or(prepare(phi.left), prepare(phi.right))
+            // since bound vars are never program vars, we only need to replace on expression
+            is Forall -> Forall(phi.boundVar, prepare(phi.expression))
+        }
+
   fun augment(pre: BooleanExpression, scope: Scope): BooleanExpression {
-    var newPre = pre
-    scope.symbols
-        .filter { it.value.size == 1 && it.value.type == BasicType.INT }
-        .map { Eq(ValAtAddr(Variable(it.key)), NumericLiteral(BigInteger.ZERO), 0) }
-        .forEach { newPre = And(newPre, it) }
+    var newPre = prepare(pre)
+    var addr = 0L
+    for (entry in scope.symbols) {
+        val value = if (entry.value.size == 1) 0 else addr+1
+        newPre = And(newPre, And(
+            Eq(ValAtAddr(Variable(entry.key)), ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))), 0),
+            Eq(ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))), NumericLiteral(value.toBigInteger()), 0)))
+        addr++
+        if (entry.value.size > 1) {
+            for (i in 0..<entry.value.size-1) {
+                newPre = And(newPre, Eq(ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))), NumericLiteral(BigInteger.ZERO), 0))
+              addr++
+            }
+        }
+    }
     return newPre
   }
 
   fun proof(): Boolean {
     val pre = augment(context.pre, context.scope)
-    val vcs = vcgen(pre, context.program, context.post)
+    val vcs = vcgen(pre, context.program, prepare(context.post))
     output.println("==== generating verification conditions: ====")
     var success = true
     vcs.forEach { output.println("$it") }

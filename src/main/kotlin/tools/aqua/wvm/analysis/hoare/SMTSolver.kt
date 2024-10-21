@@ -29,14 +29,28 @@ import tools.aqua.wvm.language.False
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
+import kotlin.math.exp
 
 class SMTSolver {
+
+  val memArray = "M_"
 
   class Result(val status: SatStatus, val model: Map<String, String>)
 
   var vars = mapOf<String, DeclareConst>()
 
-  val ctx = Context(QF_LIA)
+  val ctx = Context(AUFLIA)
+
+  init {
+    vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
+  }
+
+  fun asKonstraint(expr:ArrayExpression) : Expression<*> = when (expr) {
+    is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+    is ArrayRead -> ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index)) as Expression<IntSort>
+    is ArrayWrite -> ArrayStore(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index), asKonstraint(expr.value))
+    else -> throw Exception("oh no")
+  }
 
   fun asKonstraint(expr: AddressExpression): Expression<IntSort> {
     if (expr is Variable) {
@@ -44,6 +58,8 @@ class SMTSolver {
         vars += (expr.name to DeclareConst(Symbol(expr.name), IntSort))
       }
       return UserDeclaredExpression(Symbol(expr.name), IntSort)
+    } else if (expr is ArrayRead) {
+      return asKonstraint(expr) as Expression<IntSort>
     } else throw Exception("WPC Proof System cannot compute with address expression ${expr}")
   }
 
@@ -58,6 +74,7 @@ class SMTSolver {
         is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
         is ValAtAddr -> asKonstraint(expr.addr)
         is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
+        //is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as Expression<IntSort>
       }
 
   fun asKonstraint(expr: BooleanExpression): Expression<BoolSort> =
@@ -89,13 +106,18 @@ class SMTSolver {
     var model = emptyMap<String, String>()
     smtProgram.solve()
     if (smtProgram.status == SatStatus.SAT) {
-      commands += GetModel
-      val progForModel = DefaultSMTProgram(commands, ctx)
-      progForModel.solve()
-      model =
+      try {
+        commands += GetModel
+        val progForModel = DefaultSMTProgram(commands, ctx)
+        progForModel.solve()
+        model =
           progForModel.model?.definitions?.associate { it ->
             (it.name.toString() to it.term.toString())
           } ?: emptyMap()
+      } catch (ex: Exception) {
+        // todo: produce some output
+        println("oops.")
+      }
     }
     return Result(smtProgram.status, model)
   }
