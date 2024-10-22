@@ -9,6 +9,7 @@ code:
   while(i < n) invariant ((sum = ((i * (i+1))/2)) and (not (n < i))){
     i:= i + 1;
     sum := sum + i;
+    assert (i <= n);
   };
   assert (n = i);
 post: (sum = ((n * (n+1))/2))
