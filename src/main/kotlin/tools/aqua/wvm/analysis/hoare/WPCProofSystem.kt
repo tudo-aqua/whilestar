@@ -42,13 +42,13 @@ class WPCProofSystem(val context: Context, val output: Output) {
       program: List<Statement>,
       post: BooleanExpression
   ): Pair<BooleanExpression, List<Entailment>> {
-      val l1 = listOf(Entailment(pre, wpc(SequenceOfStatements(program), post), "Precondition"))
-      val (newPre, l2) = vcgen(pre, SequenceOfStatements(program), post)
-      return Pair(newPre, l1 + l2)
+    val l1 = listOf(Entailment(pre, wpc(SequenceOfStatements(program), post), "Precondition"))
+    val (newPre, l2) = vcgen(pre, SequenceOfStatements(program), post)
+    return Pair(newPre, l1 + l2)
   }
 
-  
-  // private fun vcgen(pre: BooleanExpression, stmt: Statement, post: BooleanExpression): List<Entailment> =
+  // private fun vcgen(pre: BooleanExpression, stmt: Statement, post: BooleanExpression):
+  // List<Entailment> =
   //     when (stmt) {
   //       is While ->
   //           listOf(
@@ -66,34 +66,42 @@ class WPCProofSystem(val context: Context, val output: Output) {
   //       else -> emptyList()
   //     }
 
-  private fun vcgen(pre: BooleanExpression, stmt: Statement, post: BooleanExpression): Pair<BooleanExpression, List<Entailment>> =
+  private fun vcgen(
+      pre: BooleanExpression,
+      stmt: Statement,
+      post: BooleanExpression
+  ): Pair<BooleanExpression, List<Entailment>> =
       when (stmt) {
-          is While -> {
-	      val wpcBody = wpc(stmt.body, stmt.invariant)
-	      val assumption = And(pre, stmt.invariant)
-	      val (_, vcsBody) = vcgen(And(assumption, stmt.head), stmt.body, stmt.invariant)
-              Pair(And(assumption, Not(stmt.head)),
-		   listOf(
-                       Entailment(
-			   And(assumption, stmt.head),
-			   wpcBody,
-			   "Entering loop with invariant ${stmt.invariant}"),
-                       Entailment(
-			   And(assumption, Not(stmt.head)),
-			   post,
-			   "Leaving loop with invariant ${stmt.invariant}")) + vcsBody)
-          }
-          is IfThenElse -> {
-	      val (_, vcs1) = vcgen(pre, stmt.thenBlock, post)
-	      val (_, vcs2) = vcgen(pre, stmt.elseBlock, post)
-	      Pair(pre, vcs1 + vcs2)
-	  }
-	  is Assertion -> Pair(And(pre, stmt.cond), listOf(Entailment(And(pre, stmt.cond), post, "Following assertion")))
-          else -> Pair(pre, emptyList())
+        is While -> {
+          val wpcBody = wpc(stmt.body, stmt.invariant)
+          val assumption = And(pre, stmt.invariant)
+          val (_, vcsBody) = vcgen(And(assumption, stmt.head), stmt.body, stmt.invariant)
+          Pair(
+              And(assumption, Not(stmt.head)),
+              listOf(
+                  Entailment(
+                      And(assumption, stmt.head),
+                      wpcBody,
+                      "Entering loop with invariant ${stmt.invariant}"),
+                  Entailment(
+                      And(assumption, Not(stmt.head)),
+                      post,
+                      "Leaving loop with invariant ${stmt.invariant}")) + vcsBody)
+        }
+        is IfThenElse -> {
+          val (_, vcs1) = vcgen(pre, stmt.thenBlock, post)
+          val (_, vcs2) = vcgen(pre, stmt.elseBlock, post)
+          Pair(pre, vcs1 + vcs2)
+        }
+        is Assertion ->
+            Pair(
+                And(pre, stmt.cond),
+                listOf(Entailment(And(pre, stmt.cond), post, "Following assertion")))
+        else -> Pair(pre, emptyList())
       }
 
-  
-  // private fun vcgen(pre: BooleanExpression, stmt: SequenceOfStatements, post: BooleanExpression): List<Entailment> =
+  // private fun vcgen(pre: BooleanExpression, stmt: SequenceOfStatements, post: BooleanExpression):
+  // List<Entailment> =
   //     if (stmt.isExhausted()) emptyList()
   //     else {
   //       val last = stmt.end()
@@ -101,17 +109,20 @@ class WPCProofSystem(val context: Context, val output: Output) {
   //       vcgen(True, last, post) + vcgen(pre, SequenceOfStatements(stmt.front()), wpc)
   //     }
 
-  private fun vcgen(pre: BooleanExpression, stmt: SequenceOfStatements, post: BooleanExpression): Pair<BooleanExpression, List<Entailment>> =
+  private fun vcgen(
+      pre: BooleanExpression,
+      stmt: SequenceOfStatements,
+      post: BooleanExpression
+  ): Pair<BooleanExpression, List<Entailment>> =
       if (stmt.isExhausted()) Pair(pre, emptyList())
       else {
         val last = stmt.end()
         val wpc = wpc(last, post)
-	val (newPre1, l1) = vcgen(pre, SequenceOfStatements(stmt.front()), wpc)
+        val (newPre1, l1) = vcgen(pre, SequenceOfStatements(stmt.front()), wpc)
         val (newPre2, l2) = vcgen(newPre1, last, post)
-	Pair(newPre2, l1 + l2)
+        Pair(newPre2, l1 + l2)
       }
 
-  
   private fun wpc(stmt: Statement, post: BooleanExpression): BooleanExpression =
       when (stmt) {
         is While -> stmt.invariant
@@ -121,7 +132,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
                 Imply(Not(stmt.cond), wpc(stmt.elseBlock, post)))
         is Assignment -> wpc(stmt, post)
         is Swap -> wpc(stmt, post)
-	is Assertion -> stmt.cond
+        is Assertion -> stmt.cond
         is Print -> post
         is Fail -> True
         is Havoc -> wpc(stmt, post)

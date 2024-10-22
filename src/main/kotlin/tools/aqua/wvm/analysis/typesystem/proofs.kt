@@ -488,7 +488,6 @@ class AssertPrf(
   }
 }
 
-
 class SequenceOfStatementsPrf(
     val ctx: Scope,
     val stmt: SequenceOfStatements,

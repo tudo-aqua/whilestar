@@ -111,9 +111,7 @@ data class Swap(val left: AddressExpression, val right: AddressExpression) : Sta
   override fun toIndentedString(indent: String) = "${indent}swap $left and $right;\n"
 }
 
-data class Assertion (
-    val cond: BooleanExpression
-) : Statement {
+data class Assertion(val cond: BooleanExpression) : Statement {
 
   override fun execute(cfg: Configuration, input: Scanner?): StatementApp {
     val b = cond.evaluate(cfg.scope, cfg.memory)
@@ -132,19 +130,16 @@ data class Assertion (
                 cfg,
                 dst =
                     Configuration(
-                        SequenceOfStatements(cfg.statements.tail()),
-                        cfg.scope,
-                        cfg.memory)))
+                        SequenceOfStatements(cfg.statements.tail()), cfg.scope, cfg.memory)))
     else
-	AssertErr(
+        AssertErr(
             b as BooleanExpressionOk,
-            Transition(cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
+            Transition(
+                cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
   }
 
-  override fun toIndentedString(indent: String) =
-      "${indent}assert $cond;"
+  override fun toIndentedString(indent: String) = "${indent}assert $cond;"
 }
-
 
 data class IfThenElse(
     val cond: BooleanExpression,

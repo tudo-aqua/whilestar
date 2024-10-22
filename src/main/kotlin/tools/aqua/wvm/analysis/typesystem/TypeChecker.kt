@@ -305,7 +305,6 @@ class TypeChecker(private val ctx: Scope) {
     return AssertPrf(ctx, stmt, type, prfCond)
   }
 
-
   fun typeOf(stmts: SequenceOfStatements): SequenceOfStatementsPrf {
     val type = BasicType.UNIT
     val prfs = stmts.statements.map { typeOf(it) }

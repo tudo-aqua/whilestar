@@ -264,8 +264,7 @@ object Parser {
               Fail((results[1] as String).slice(1 ..< (results[1] as String).length - 1))
             } +
             (assertKW * condition * semicolon).map { results: List<Any> ->
-	      @Suppress("UNCHECKED_CAST")
-	      Assertion(results[1] as BooleanExpression)	
+              @Suppress("UNCHECKED_CAST") Assertion(results[1] as BooleanExpression)
             })
   }
 
