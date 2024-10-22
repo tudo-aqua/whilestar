@@ -10,4 +10,5 @@ code:
     i:= i + 1;
     sum := sum + i;
   };
+  assert (n = i);
 post: (sum = ((n * (n+1))/2))
