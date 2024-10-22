@@ -29,7 +29,8 @@ statements:
 
 Moreover, While* programs can contain pre-conditions and post-conditions. WVM implements an
 interpreter, a type checker, and a Hoare proof system based on weakest precondition transformers.
-[The visual While* interpreter](https://wiz.cs.tu-dortmund.de) (WiZ) additionally provides a visual debugger for While\* programs.
+[The visual While* interpreter](https://wiz.cs.tu-dortmund.de) (WiZ) additionally provides a visual
+debugger for While\* programs.
 
 ## Example
 

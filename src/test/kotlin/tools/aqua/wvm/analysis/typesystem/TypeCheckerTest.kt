@@ -34,8 +34,8 @@ class TypeCheckerTest {
     // println(SequenceOfStatements(context.program))
     try {
       val proof = checker.checkExternalCheck(SequenceOfStatements(context.program))
-    } catch(e : Exception) {
-      if(shouldFail) {
+    } catch (e: Exception) {
+      if (shouldFail) {
         return
       }
       throw e

@@ -41,7 +41,7 @@ plugins {
 
 group = "tools.aqua"
 
-version = "1.0-SNAPSHOT"
+version = "0.3-SNAPSHOT"
 
 repositories { mavenCentral() }
 
@@ -166,6 +166,7 @@ publishing {
       pom {
         name = "While* Virtual Machine"
         description = "An execution environment for the While* teaching language"
+        url = "https://github.com/tudo-aqua/whilestar"
 
         licenses {
           license {
@@ -194,6 +195,12 @@ publishing {
             email = "richard.stewing@tu-dortmund.de"
             organization = "TU Dortmund University"
           }
+        }
+
+        scm {
+          connection = "scm:git:https://github.com:tudo-aqua/whilestar.git"
+          developerConnection = "scm:git:ssh://git@github.com:tudo-aqua/whilestar.git"
+          url = "https://github.com/tudo-aqua/whilestar/tree/main"
         }
       }
     }
