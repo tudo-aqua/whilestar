@@ -469,6 +469,25 @@ class SwapPrf(
   }
 }
 
+class AssertPrf(
+    ctx: Scope,
+    stmt: Assertion,
+    type: Type,
+    val condPrf: BooleanProofTree,
+) : StatementProofTree(ctx, stmt, type, "Assert; $stmt -> $type", condPrf) {
+
+  init {
+    statmentType(stmt, type)
+    proofTreeTermCorrespondence(condPrf, stmt.cond)
+    ctxEqual(ctx, condPrf.ctx)
+  }
+
+  override fun print(indent: String) {
+    println("$indent$desc")
+    children.forEach { it.print("$indent  ") }
+  }
+}
+
 class SequenceOfStatementsPrf(
     val ctx: Scope,
     val stmt: SequenceOfStatements,

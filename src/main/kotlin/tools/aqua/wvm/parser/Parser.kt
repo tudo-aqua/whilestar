@@ -111,6 +111,7 @@ object Parser {
   private val printKW = of("print") trim whitespaceCat
   private val havocKW = of("extern") trim whitespaceCat
   private val failKW = of("fail") trim whitespaceCat
+  private val assertKW = of("assert") trim whitespaceCat
 
   private val invariant = of("invariant") trim whitespaceCat
   private val negNumeral = numeral + (minus * numeral)
@@ -262,6 +263,9 @@ object Parser {
             } +
             (failKW * string * semicolon).map { results: List<Any> ->
               Fail((results[1] as String).slice(1 ..< (results[1] as String).length - 1))
+            } +
+            (assertKW * condition * semicolon).map { results: List<Any> ->
+              @Suppress("UNCHECKED_CAST") Assertion(results[1] as BooleanExpression)
             })
   }
 
