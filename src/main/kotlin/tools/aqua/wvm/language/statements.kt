@@ -135,7 +135,7 @@ data class Assertion(val cond: BooleanExpression) : Statement {
         AssertErr(
             b as BooleanExpressionOk,
             Transition(
-                cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
+                cfg, dst = Configuration(SequenceOfStatements(cfg.statements.tail()), cfg.scope, cfg.memory)))
   }
 
   override fun toIndentedString(indent: String) = "${indent}assert $cond;"
