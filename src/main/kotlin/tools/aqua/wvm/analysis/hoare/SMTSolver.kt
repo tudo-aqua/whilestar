@@ -69,7 +69,7 @@ class SMTSolver {
         is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Rem -> throw Exception("WPC Proof System cannot compute with remainder ${expr}")
+        is Rem -> Mod(asKonstraint(expr.left), asKonstraint(expr.right))
         is Sub -> IntSub(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
         is ValAtAddr -> asKonstraint(expr.addr)
