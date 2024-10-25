@@ -324,7 +324,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
       }
     }
     output.println("=============================================")
-    output.println("The proof was ${if (success) "" else "not"} successful.")
+    output.println("The proof was ${if (success) "" else "not "}successful.")
     return success
   }
 }
