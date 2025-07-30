@@ -129,7 +129,7 @@ data class ArrayAccess(val array: ValAtAddr, val index: ArithmeticExpression) : 
                 And(
                     Eq(ValAtAddr(Variable("base")), base.result, 0),
                     Eq(ValAtAddr(Variable("offset")), offset.result, 0)))
-        println(constraint)
+        // println(constraint)
         var result = smtSolver.solve(constraint)
         while (result.status == SatStatus.SAT) {
           val b = result.model["base"]!!.toInt()
