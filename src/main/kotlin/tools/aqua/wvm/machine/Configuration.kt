@@ -20,7 +20,6 @@ package tools.aqua.wvm.machine
 
 import tools.aqua.wvm.language.*
 
-
 data class Configuration(
     val statements: SequenceOfStatements,
     val scope: Scope,
@@ -31,5 +30,6 @@ data class Configuration(
 
   fun isFinal() = statements.isExhausted()
 
-  override fun toString(): String = "${memory.toString()} ${if (error) "in error configuration " else ""}under $pathConstraint"
+  override fun toString(): String =
+      "${memory.toString()} ${if (error) "in error configuration " else ""}under $pathConstraint"
 }

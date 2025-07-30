@@ -110,11 +110,16 @@ class SMTSolver {
       }
 
   fun solve(expr: BooleanExpression): Result {
-    val oldModels = seenModels.map {
-      it.entries.map {
-        Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
-      }.reduce<BooleanExpression, Eq>{ acc, eq -> And(acc, eq) }
-    }.reduceOrDefault(False) {exp1, exp2 -> Or(exp1, exp2)}
+    val oldModels =
+        seenModels
+            .map {
+              it.entries
+                  .map {
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
+                  }
+                  .reduce<BooleanExpression, Eq> { acc, eq -> And(acc, eq) }
+            }
+            .reduceOrDefault(False) { exp1, exp2 -> Or(exp1, exp2) }
     val konstraint = asKonstraint(And(expr, Not(oldModels)))
     var commands = vars.values + Assert(konstraint) + CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
@@ -126,11 +131,11 @@ class SMTSolver {
         val progForModel = DefaultSMTProgram(commands, ctx)
         progForModel.solve()
         model =
-          progForModel.model?.definitions?.associate { it ->
-            (it.name.toString() to it.term.toString())
-          } ?: emptyMap()
+            progForModel.model?.definitions?.associate { it ->
+              (it.name.toString() to it.term.toString())
+            } ?: emptyMap()
         seenModels.addLast(model)
-        //println(model)
+        // println(model)
       } catch (ex: Exception) {
         // todo: produce some output
         println("oops.")

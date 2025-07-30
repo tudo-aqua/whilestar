@@ -26,7 +26,7 @@ class EvaluationTest {
   fun run(filename: String) {
     val source = File(filename).readText()
     val context = Parser.parse(source)
-    context.execute(false)
+    context.execute(false, symbolic = false)
   }
 
   @Test fun test1() = run("examples/array/ex1.w")

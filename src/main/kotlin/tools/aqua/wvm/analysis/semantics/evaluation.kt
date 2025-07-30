@@ -21,9 +21,7 @@ package tools.aqua.wvm.analysis.semantics
 import java.math.BigInteger
 import tools.aqua.wvm.language.*
 
-sealed class Application<T>(
-    val result: T,
-    val pc: BooleanExpression)
+sealed class Application<T>(val result: T, val pc: BooleanExpression)
 
 sealed interface Error {
   fun getError(): String
@@ -35,21 +33,32 @@ sealed class AddressApp(result: Int, pc: BooleanExpression) : Application<Int>(r
 
 sealed class AddressOk(result: Int, pc: BooleanExpression) : AddressApp(result, pc)
 
-sealed class AddressError(addr: Int, private val error: String, pc: BooleanExpression) : AddressApp(addr,pc), Error {
+sealed class AddressError(addr: Int, private val error: String, pc: BooleanExpression) :
+    AddressApp(addr, pc), Error {
   override fun getError() = error
 }
 
-class NestedAddressError(val ruleName: String, val nested: Error, val expr: AddressExpression, pc: BooleanExpression) :
-    AddressError(-1, "$ruleName: $expr.", pc)
+class NestedAddressError(
+    val ruleName: String,
+    val nested: Error,
+    val expr: AddressExpression,
+    pc: BooleanExpression
+) : AddressError(-1, "$ruleName: $expr.", pc)
 
 class VarOk(val v: Variable, addr: Int, pc: BooleanExpression) : AddressOk(addr, pc)
 
-class VarErr(val v: Variable, pc: BooleanExpression) : AddressError(-1, "Variable ${v.name} undefined.", pc)
+class VarErr(val v: Variable, pc: BooleanExpression) :
+    AddressError(-1, "Variable ${v.name} undefined.", pc)
 
-class DeRefOk(val refOk: AddressOk, val deRef: DeRef, readValue: Int, pc: BooleanExpression) : AddressOk(readValue, pc)
+class DeRefOk(val refOk: AddressOk, val deRef: DeRef, readValue: Int, pc: BooleanExpression) :
+    AddressOk(readValue, pc)
 
-class DeRefAddressError(val refOk: AddressOk, val deRef: DeRef, refValue: Int, pc: BooleanExpression) :
-    AddressError(refValue, "Invalid address $refValue.", pc)
+class DeRefAddressError(
+    val refOk: AddressOk,
+    val deRef: DeRef,
+    refValue: Int,
+    pc: BooleanExpression
+) : AddressError(refValue, "Invalid address $refValue.", pc)
 
 class ArrayAccessOk(
     val addrOk: ValAtAddrOk,
@@ -69,9 +78,11 @@ class ArrayAccessError(
 
 // --------------------------------------------------------------------
 
-sealed class ArithmeticExpressionApp(result: ArithmeticExpression, pc: BooleanExpression) : Application<ArithmeticExpression>(result, pc)
+sealed class ArithmeticExpressionApp(result: ArithmeticExpression, pc: BooleanExpression) :
+    Application<ArithmeticExpression>(result, pc)
 
-sealed class ArithmeticExpressionOk(result: ArithmeticExpression,pc: BooleanExpression) : ArithmeticExpressionApp(result,pc)
+sealed class ArithmeticExpressionOk(result: ArithmeticExpression, pc: BooleanExpression) :
+    ArithmeticExpressionApp(result, pc)
 
 sealed class ArithmeticExpressionError(private val error: String, pc: BooleanExpression) :
     ArithmeticExpressionApp(NumericLiteral(BigInteger.ZERO), pc), Error {
@@ -138,27 +149,42 @@ class UnaryMinusOk(
     pc: BooleanExpression
 ) : ArithmeticExpressionOk(result, pc)
 
-class ValAtAddrOk(val addrOk: AddressOk, val valAtAddr: ValAtAddr, value: ArithmeticExpression, pc: BooleanExpression) :
-    ArithmeticExpressionOk(value, pc)
+class ValAtAddrOk(
+    val addrOk: AddressOk,
+    val valAtAddr: ValAtAddr,
+    value: ArithmeticExpression,
+    pc: BooleanExpression
+) : ArithmeticExpressionOk(value, pc)
 
-class VarAddrOk(val addrOk: AddressOk, val varAddress: VarAddress, value: BigInteger, pc: BooleanExpression) :
-    ArithmeticExpressionOk(NumericLiteral(value), pc)
+class VarAddrOk(
+    val addrOk: AddressOk,
+    val varAddress: VarAddress,
+    value: BigInteger,
+    pc: BooleanExpression
+) : ArithmeticExpressionOk(NumericLiteral(value), pc)
 
-class NumericLiteralOk(val n: NumericLiteral, pc: BooleanExpression) : ArithmeticExpressionOk(n, pc)
+class NumericLiteralOk(val n: NumericLiteral, pc: BooleanExpression) :
+    ArithmeticExpressionOk(n, pc)
 
 // --------------------------------------------------------------------
 
-sealed class BooleanExpressionApp(result: BooleanExpression, pc: BooleanExpression) : Application<BooleanExpression>(result, pc)
+sealed class BooleanExpressionApp(result: BooleanExpression, pc: BooleanExpression) :
+    Application<BooleanExpression>(result, pc)
 
-sealed class BooleanExpressionOk(result: BooleanExpression, pc: BooleanExpression) : BooleanExpressionApp(result, pc)
+sealed class BooleanExpressionOk(result: BooleanExpression, pc: BooleanExpression) :
+    BooleanExpressionApp(result, pc)
 
 sealed class BooleanExpressionError(private val error: String, pc: BooleanExpression) :
     BooleanExpressionApp(False, pc), Error {
   override fun getError() = error
 }
 
-class NestedBooleanError(val ruleName: String, val nested: Error, val expr: Expression<*>, pc: BooleanExpression) :
-    BooleanExpressionError("$ruleName: $expr.", pc)
+class NestedBooleanError(
+    val ruleName: String,
+    val nested: Error,
+    val expr: Expression<*>,
+    pc: BooleanExpression
+) : BooleanExpressionError("$ruleName: $expr.", pc)
 
 class EqOk(
     val leftOk: ArithmeticExpressionOk,
@@ -174,7 +200,7 @@ class GtOk(
     val gt: Gt,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class GteOk(
     val leftOk: ArithmeticExpressionOk,
@@ -182,7 +208,7 @@ class GteOk(
     val gte: Gte,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class LtOk(
     val leftOk: ArithmeticExpressionOk,
@@ -190,7 +216,7 @@ class LtOk(
     val lt: Lt,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class LteOk(
     val leftOk: ArithmeticExpressionOk,
@@ -198,7 +224,7 @@ class LteOk(
     val lte: Lte,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class AndOk(
     val leftOk: BooleanExpressionOk,
@@ -206,7 +232,7 @@ class AndOk(
     val and: And,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class OrOk(
     val leftOk: BooleanExpressionOk,
@@ -214,7 +240,7 @@ class OrOk(
     val or: Or,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class ImplyOk(
     val leftOk: BooleanExpressionOk,
@@ -222,7 +248,7 @@ class ImplyOk(
     val imply: Imply,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
 class EquivOk(
     val leftOk: BooleanExpressionOk,
@@ -230,23 +256,28 @@ class EquivOk(
     val equiv: Equiv,
     result: BooleanExpression,
     pc: BooleanExpression
-) : BooleanExpressionOk(result,pc)
+) : BooleanExpressionOk(result, pc)
 
-class NotOk(val negated: BooleanExpressionOk, val not: Not, result: BooleanExpression, pc: BooleanExpression) :
-    BooleanExpressionOk(result, pc)
+class NotOk(
+    val negated: BooleanExpressionOk,
+    val not: Not,
+    result: BooleanExpression,
+    pc: BooleanExpression
+) : BooleanExpressionOk(result, pc)
 
-class TrueOk(val tru: True,pc: BooleanExpression) : BooleanExpressionOk(True, pc)
+class TrueOk(val tru: True, pc: BooleanExpression) : BooleanExpressionOk(True, pc)
 
-class FalseOk(val fls: False,pc: BooleanExpression) : BooleanExpressionOk(False,pc)
+class FalseOk(val fls: False, pc: BooleanExpression) : BooleanExpressionOk(False, pc)
 
 // --------------------------------------------------------------------
 
-sealed class StatementApp(result: Transition,pc: BooleanExpression) : Application<Transition>(result,pc)
+sealed class StatementApp(result: Transition, pc: BooleanExpression) :
+    Application<Transition>(result, pc)
 
-sealed class StatementOk(result: Transition,pc: BooleanExpression) : StatementApp(result,pc)
+sealed class StatementOk(result: Transition, pc: BooleanExpression) : StatementApp(result, pc)
 
 sealed class StatementError(private val error: String, result: Transition, pc: BooleanExpression) :
-    StatementApp(result,pc), Error {
+    StatementApp(result, pc), Error {
   override fun getError() = error
 }
 
@@ -256,7 +287,7 @@ class NestedStatementError(
     val stmt: Statement,
     result: Transition,
     pc: BooleanExpression
-) : StatementError("$ruleName: $stmt.", result,pc)
+) : StatementError("$ruleName: $stmt.", result, pc)
 
 class AssOk(
     val addr: AddressOk,
@@ -264,20 +295,43 @@ class AssOk(
     val assign: Assignment,
     trans: Transition,
     pc: BooleanExpression
-) : StatementOk(trans,pc)
+) : StatementOk(trans, pc)
 
-class SwapOk(val a1: AddressOk, val a2: AddressOk, val swap: Swap, trans: Transition, pc: BooleanExpression) :
-    StatementOk(trans,pc)
+class SwapOk(
+    val a1: AddressOk,
+    val a2: AddressOk,
+    val swap: Swap,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
 
-class AssertOK(val stmt: Assertion, val expr: BooleanExpressionOk, trans: Transition,pc: BooleanExpression) : StatementOk(trans,pc)
+class AssertOK(
+    val stmt: Assertion,
+    val expr: BooleanExpressionOk,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
 
-class AssertErr(val stmt: Assertion, val expr: BooleanExpressionOk, trans: Transition,pc: BooleanExpression) : StatementOk(trans, pc)
+class AssertErr(
+    val stmt: Assertion,
+    val expr: BooleanExpressionOk,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
 
-class IfTrue(val b: BooleanExpressionOk, val ifThenElse: IfThenElse, trans: Transition, pc: BooleanExpression) :
-    StatementOk(trans,pc)
+class IfTrue(
+    val b: BooleanExpressionOk,
+    val ifThenElse: IfThenElse,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
 
-class IfFalse(val b: BooleanExpressionOk, val ifThenElse: IfThenElse, trans: Transition, pc: BooleanExpression) :
-    StatementOk(trans,pc)
+class IfFalse(
+    val b: BooleanExpressionOk,
+    val ifThenElse: IfThenElse,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
 
 class WhInvar(
     val cond: BooleanExpressionOk,
@@ -285,7 +339,7 @@ class WhInvar(
     val wh: While,
     trans: Transition,
     pc: BooleanExpression
-) : StatementOk(trans,pc)
+) : StatementOk(trans, pc)
 
 class WhTrue(
     val cond: BooleanExpressionOk,
@@ -303,11 +357,21 @@ class WhFalse(
     pc: BooleanExpression
 ) : StatementOk(trans, pc)
 
-class PrintOk(val expr: List<ArithmeticExpressionOk>, val print: Print, trans: Transition, pc: BooleanExpression) :
+class PrintOk(
+    val expr: List<ArithmeticExpressionOk>,
+    val print: Print,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
+
+class HavocOk(val addr: AddressOk, val havoc: Havoc, trans: Transition, pc: BooleanExpression) :
     StatementOk(trans, pc)
 
-class HavocOk(val addr: AddressOk, val havoc: Havoc, trans: Transition, pc: BooleanExpression) : StatementOk(trans, pc)
+class HavocRangeErr(
+    val addr: AddressOk,
+    val havoc: Havoc,
+    trans: Transition,
+    pc: BooleanExpression
+) : StatementOk(trans, pc)
 
-class HavocRangeErr(val addr: AddressOk, val havoc: Havoc, trans: Transition, pc: BooleanExpression) : StatementOk(trans,pc)
-
-class FailOk(val fail: Fail, trans: Transition,pc: BooleanExpression) : StatementOk(trans,pc)
+class FailOk(val fail: Fail, trans: Transition, pc: BooleanExpression) : StatementOk(trans, pc)

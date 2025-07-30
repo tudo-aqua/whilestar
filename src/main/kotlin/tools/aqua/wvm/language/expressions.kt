@@ -18,16 +18,19 @@
 
 package tools.aqua.wvm.language
 
-import tools.aqua.konstraints.smt.SatStatus
 import java.math.BigInteger
+import tools.aqua.konstraints.smt.SatStatus
+import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.semantics.*
 import tools.aqua.wvm.machine.Memory
 import tools.aqua.wvm.machine.Scope
-import tools.aqua.wvm.analysis.hoare.SMTSolver
-
 
 sealed interface Expression<T> {
-  fun evaluate(scope: Scope, memory: Memory<ArithmeticExpression>, pathConstraint: BooleanExpression): List<Application<T>>
+  fun evaluate(
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
+  ): List<Application<T>>
 }
 
 sealed interface ArithmeticExpression : Expression<ArithmeticExpression>
@@ -40,9 +43,9 @@ sealed interface BooleanExpression : Expression<BooleanExpression>
 
 data class Variable(val name: String) : AddressExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<Int>> =
       if (scope.defines(name)) listOf(VarOk(this, scope.resolve(name), pathConstraint))
       else listOf(VarErr(this, pathConstraint))
@@ -52,41 +55,48 @@ data class Variable(val name: String) : AddressExpression {
 
 data class DeRef(val reference: AddressExpression) : AddressExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<Int>> {
     val apps = mutableListOf<Application<Int>>()
-    for( refApp in reference.evaluate(scope, memory, pathConstraint)) {
+    for (refApp in reference.evaluate(scope, memory, pathConstraint)) {
       if (refApp is Error) {
         apps.addLast(NestedAddressError("DeRefNestedError", refApp, this, refApp.pc))
         continue
       }
       // the semantics guarantee that refApp.result is a valid address
       val tmp = memory.read(refApp.result)
-      val address = when(tmp){
-        is NumericLiteral -> listOf(tmp.literal)
-        else -> {
-          val smtSolver = SMTSolver()
-          val constraint =
-            And(refApp.pc,
-              Eq(ValAtAddr(Variable("addr")), tmp, 0)
-            )
-          var result = smtSolver.solve(constraint)
-          val addresses = mutableListOf<BigInteger>()
-          while(result.status == SatStatus.SAT) {
-            addresses.addLast(result.model["addr"]!!.toBigInteger())
-            result = smtSolver.solve(constraint)
+      val address =
+          when (tmp) {
+            is NumericLiteral -> listOf(tmp.literal)
+            else -> {
+              val smtSolver = SMTSolver()
+              val constraint = And(refApp.pc, Eq(ValAtAddr(Variable("addr")), tmp, 0))
+              var result = smtSolver.solve(constraint)
+              val addresses = mutableListOf<BigInteger>()
+              while (result.status == SatStatus.SAT) {
+                addresses.addLast(result.model["addr"]!!.toBigInteger())
+                result = smtSolver.solve(constraint)
+              }
+              addresses
+            }
           }
-          addresses
-        }
-      }
       val derefs =
-        address.map {
-          if (it in BigInteger.ZERO ..< memory.size().toBigInteger())
-            DeRefOk(refApp as AddressOk, this, it.toInt(), And(refApp.pc, Eq(NumericLiteral(it), tmp, 0)))
-          else DeRefAddressError(refApp as AddressOk, this, it.toInt(), And(refApp.pc, Eq(NumericLiteral(it), tmp, 0)))
-      }
+          address.map {
+            if (it in BigInteger.ZERO ..< memory.size().toBigInteger())
+                DeRefOk(
+                    refApp as AddressOk,
+                    this,
+                    it.toInt(),
+                    And(refApp.pc, Eq(NumericLiteral(it), tmp, 0)))
+            else
+                DeRefAddressError(
+                    refApp as AddressOk,
+                    this,
+                    it.toInt(),
+                    And(refApp.pc, Eq(NumericLiteral(it), tmp, 0)))
+          }
       apps.addAll(derefs)
     }
     return apps
@@ -97,9 +107,9 @@ data class DeRef(val reference: AddressExpression) : AddressExpression {
 
 data class ArrayAccess(val array: ValAtAddr, val index: ArithmeticExpression) : AddressExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<Int>> {
     val apps = mutableListOf<Application<Int>>()
     for (base in array.evaluate(scope, memory, pathConstraint)) {
@@ -114,45 +124,43 @@ data class ArrayAccess(val array: ValAtAddr, val index: ArithmeticExpression) : 
         }
         val smtSolver = SMTSolver()
         val constraint =
-          And(
-            And(base.pc, offset.pc),
             And(
-              Eq(ValAtAddr(Variable("base")), base.result, 0),
-              Eq(ValAtAddr(Variable("offset")), offset.result, 0)
-            )
-          )
+                And(base.pc, offset.pc),
+                And(
+                    Eq(ValAtAddr(Variable("base")), base.result, 0),
+                    Eq(ValAtAddr(Variable("offset")), offset.result, 0)))
+        println(constraint)
         var result = smtSolver.solve(constraint)
         while (result.status == SatStatus.SAT) {
           val b = result.model["base"]!!.toInt()
           val o = result.model["offset"]!!.toInt()
           val a = b + o
           if (a in 0 ..< memory.size())
-            apps.addLast(
-              ArrayAccessOk(
-                base as ValAtAddrOk,
-                offset as ArithmeticExpressionOk,
-                this,
-                a,
-                And(
-                  And(base.pc, offset.pc),
-                  And(
-                    Eq(NumericLiteral(b.toBigInteger()), base.result, 0),
-                    Eq(NumericLiteral(o.toBigInteger()), offset.result, 0),
-                  ))
-                ))
+              apps.addLast(
+                  ArrayAccessOk(
+                      base as ValAtAddrOk,
+                      offset as ArithmeticExpressionOk,
+                      this,
+                      a,
+                      And(
+                          And(base.pc, offset.pc),
+                          And(
+                              Eq(NumericLiteral(b.toBigInteger()), base.result, 0),
+                              Eq(NumericLiteral(o.toBigInteger()), offset.result, 0),
+                          ))))
           else
-            apps.addLast(ArrayAccessError(
-              base as ValAtAddrOk,
-              offset as ArithmeticExpressionOk,
-              this,
-              a,
-              And(
-                And(base.pc, offset.pc),
-                And(
-                  Eq(NumericLiteral(b.toBigInteger()), base.result, 0),
-                  Eq(NumericLiteral(o.toBigInteger()), offset.result, 0),
-                ))
-            ))
+              apps.addLast(
+                  ArrayAccessError(
+                      base as ValAtAddrOk,
+                      offset as ArithmeticExpressionOk,
+                      this,
+                      a,
+                      And(
+                          And(base.pc, offset.pc),
+                          And(
+                              Eq(NumericLiteral(b.toBigInteger()), base.result, 0),
+                              Eq(NumericLiteral(o.toBigInteger()), offset.result, 0),
+                          ))))
           result = smtSolver.solve(constraint)
         }
       }
@@ -168,9 +176,9 @@ data class ArrayAccess(val array: ValAtAddr, val index: ArithmeticExpression) : 
 data class Add(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -184,21 +192,18 @@ data class Add(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-              right.result is NumericLiteral) {
-            NumericLiteral(left.result.literal.plus(right.result.literal))
-          } else {
-            Add(left.result, right.result)
-          }
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              NumericLiteral(left.result.literal.plus(right.result.literal))
+            } else {
+              Add(left.result, right.result)
+            }
         apps.addLast(
-          AddOk(
-            left as ArithmeticExpressionOk,
-            right as ArithmeticExpressionOk,
-            this,
-            resultExp,
-            And(left.pc, right.pc)
-          )
-        )
+            AddOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -210,9 +215,9 @@ data class Add(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 data class Sub(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -226,21 +231,18 @@ data class Sub(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            NumericLiteral(left.result.literal.minus(right.result.literal))
-          } else {
-            Sub(left.result, right.result)
-          }
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              NumericLiteral(left.result.literal.minus(right.result.literal))
+            } else {
+              Sub(left.result, right.result)
+            }
         apps.addLast(
-          SubOk(
-            left as ArithmeticExpressionOk,
-            right as ArithmeticExpressionOk,
-            this,
-            resultExp,
-            And(left.pc, right.pc)
-          )
-        )
+            SubOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -252,9 +254,9 @@ data class Sub(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 data class Mul(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -268,21 +270,18 @@ data class Mul(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            NumericLiteral(left.result.literal * right.result.literal)
-          } else {
-            Mul(left.result, right.result)
-          }
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              NumericLiteral(left.result.literal * right.result.literal)
+            } else {
+              Mul(left.result, right.result)
+            }
         apps.addLast(
-          MulOk(
-            left as ArithmeticExpressionOk,
-            right as ArithmeticExpressionOk,
-            this,
-            resultExp,
-            And(left.pc, right.pc)
-          )
-        )
+            MulOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -294,9 +293,9 @@ data class Mul(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 data class Div(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -310,21 +309,18 @@ data class Div(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            NumericLiteral(left.result.literal.div(right.result.literal))
-          } else {
-            Div(left.result, right.result)
-          }
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              NumericLiteral(left.result.literal.div(right.result.literal))
+            } else {
+              Div(left.result, right.result)
+            }
         apps.addLast(
-          DivOk(
-            left as ArithmeticExpressionOk,
-            right as ArithmeticExpressionOk,
-            this,
-            resultExp,
-            And(left.pc, right.pc)
-          )
-        )
+            DivOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -336,9 +332,9 @@ data class Div(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 data class Rem(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -352,21 +348,18 @@ data class Rem(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            NumericLiteral(left.result.literal.rem(right.result.literal))
-          } else {
-            Rem(left.result, right.result)
-          }
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              NumericLiteral(left.result.literal.rem(right.result.literal))
+            } else {
+              Rem(left.result, right.result)
+            }
         apps.addLast(
-          RemOk(
-            left as ArithmeticExpressionOk,
-            right as ArithmeticExpressionOk,
-            this,
-            resultExp,
-            And(left.pc, right.pc)
-          )
-        )
+            RemOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -377,30 +370,23 @@ data class Rem(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 
 data class UnaryMinus(val negated: ArithmeticExpression) : ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (inner in negated.evaluate(scope, memory, pathConstraint)) {
-        if (inner is ArithmeticExpressionError) {
-          apps.addLast(NestedArithmeticError("UnaryMinusErr", inner, this, inner.pc))
-          continue
-        }
-        val resultExp = if (inner.result is NumericLiteral) {
-          NumericLiteral(inner.result.literal.unaryMinus())
-        } else {
-          UnaryMinus(inner.result)
-        }
-        apps.addLast(
-          UnaryMinusOk(
-            inner as ArithmeticExpressionOk,
-            this,
-            resultExp,
-            inner.pc
-          )
-        )
-
+      if (inner is ArithmeticExpressionError) {
+        apps.addLast(NestedArithmeticError("UnaryMinusErr", inner, this, inner.pc))
+        continue
+      }
+      val resultExp =
+          if (inner.result is NumericLiteral) {
+            NumericLiteral(inner.result.literal.unaryMinus())
+          } else {
+            UnaryMinus(inner.result)
+          }
+      apps.addLast(UnaryMinusOk(inner as ArithmeticExpressionOk, this, resultExp, inner.pc))
     }
     return apps
   }
@@ -410,25 +396,27 @@ data class UnaryMinus(val negated: ArithmeticExpression) : ArithmeticExpression 
 
 data class NumericLiteral(val literal: BigInteger) : ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
-  ): List<Application<ArithmeticExpression>> =
-      listOf(NumericLiteralOk(this, pathConstraint))
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
+  ): List<Application<ArithmeticExpression>> = listOf(NumericLiteralOk(this, pathConstraint))
 
   override fun toString(): String = "$literal"
 }
 
 data class ValAtAddr(val addr: AddressExpression) : ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (addrApp in addr.evaluate(scope, memory, pathConstraint)) {
-      if (addrApp is AddressError) apps.addLast(NestedArithmeticError("ValAtAddrErr", addrApp, this, addrApp.pc))
-      else apps.addLast(ValAtAddrOk(addrApp as AddressOk, this, memory.read(addrApp.result), addrApp.pc))
+      if (addrApp is AddressError)
+          apps.addLast(NestedArithmeticError("ValAtAddrErr", addrApp, this, addrApp.pc))
+      else
+          apps.addLast(
+              ValAtAddrOk(addrApp as AddressOk, this, memory.read(addrApp.result), addrApp.pc))
     }
     return apps
   }
@@ -438,14 +426,18 @@ data class ValAtAddr(val addr: AddressExpression) : ArithmeticExpression {
 
 data class VarAddress(val variable: Variable) : ArithmeticExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<ArithmeticExpression>> {
     val apps = mutableListOf<Application<ArithmeticExpression>>()
     for (varAddress in variable.evaluate(scope, memory, pathConstraint)) {
-      if (varAddress is AddressError) apps.addLast(NestedArithmeticError("VarAddrErr", varAddress, this, varAddress.pc))
-      else apps.addLast(VarAddrOk(varAddress as AddressOk, this, varAddress.result.toBigInteger(), varAddress.pc))
+      if (varAddress is AddressError)
+          apps.addLast(NestedArithmeticError("VarAddrErr", varAddress, this, varAddress.pc))
+      else
+          apps.addLast(
+              VarAddrOk(
+                  varAddress as AddressOk, this, varAddress.result.toBigInteger(), varAddress.pc))
     }
     return apps
   }
@@ -458,9 +450,9 @@ data class VarAddress(val variable: Variable) : ArithmeticExpression {
 data class Eq(val left: ArithmeticExpression, val right: ArithmeticExpression, val nesting: Int) :
     BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -469,24 +461,23 @@ data class Eq(val left: ArithmeticExpression, val right: ArithmeticExpression, v
           apps.addLast(NestedBooleanError("EqLeftErr", left, this, And(left.pc, right.pc)))
           continue
         }
-      if (right is ArithmeticExpressionError) {
-        apps.addLast(NestedBooleanError("EqRightErr", right, this, And(left.pc, right.pc)))
-        continue
-      }
-      val resultExp =
-        if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-          if (left.result.literal == right.result.literal) True else False
-        } else {
-          Eq(left.result, right.result, nesting)
+        if (right is ArithmeticExpressionError) {
+          apps.addLast(NestedBooleanError("EqRightErr", right, this, And(left.pc, right.pc)))
+          continue
         }
-      apps.addLast(EqOk(
-        left as ArithmeticExpressionOk,
-        right as ArithmeticExpressionOk,
-        this,
-        resultExp,
-        And(left.pc, And(right.pc, Eq(left.result, right.result, nesting)))
-      ))
+        val resultExp =
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              if (left.result.literal == right.result.literal) True else False
+            } else {
+              Eq(left.result, right.result, nesting)
+            }
+        apps.addLast(
+            EqOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, And(right.pc, Eq(left.result, right.result, nesting)))))
       }
     }
     return apps
@@ -499,9 +490,9 @@ data class Eq(val left: ArithmeticExpression, val right: ArithmeticExpression, v
 
 data class Gt(val left: ArithmeticExpression, val right: ArithmeticExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -515,19 +506,18 @@ data class Gt(val left: ArithmeticExpression, val right: ArithmeticExpression) :
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            if (left.result.literal > right.result.literal) True else False
-          } else {
-            Gt(left.result, right.result)
-          }
-        apps.addLast(GtOk(
-          left as ArithmeticExpressionOk,
-          right as ArithmeticExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, And(right.pc, Gt(left.result, right.result)))
-        ))
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              if (left.result.literal > right.result.literal) True else False
+            } else {
+              Gt(left.result, right.result)
+            }
+        apps.addLast(
+            GtOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, And(right.pc, Gt(left.result, right.result)))))
       }
     }
     return apps
@@ -539,9 +529,9 @@ data class Gt(val left: ArithmeticExpression, val right: ArithmeticExpression) :
 data class Gte(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -555,19 +545,18 @@ data class Gte(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            if (left.result.literal >= right.result.literal) True else False
-          } else {
-            Gte(left.result, right.result)
-          }
-        apps.addLast(GteOk(
-          left as ArithmeticExpressionOk,
-          right as ArithmeticExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, And(right.pc, Gte(left.result, right.result)))
-        ))
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              if (left.result.literal >= right.result.literal) True else False
+            } else {
+              Gte(left.result, right.result)
+            }
+        apps.addLast(
+            GteOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, And(right.pc, Gte(left.result, right.result)))))
       }
     }
     return apps
@@ -578,9 +567,9 @@ data class Gte(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 
 data class Lt(val left: ArithmeticExpression, val right: ArithmeticExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -594,19 +583,18 @@ data class Lt(val left: ArithmeticExpression, val right: ArithmeticExpression) :
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            if (left.result.literal < right.result.literal) True else False
-          } else {
-            Lt(left.result, right.result)
-          }
-        apps.addLast(LtOk(
-          left as ArithmeticExpressionOk,
-          right as ArithmeticExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, And(right.pc,Lt(left.result, right.result)))
-        ))
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              if (left.result.literal < right.result.literal) True else False
+            } else {
+              Lt(left.result, right.result)
+            }
+        apps.addLast(
+            LtOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, And(right.pc, Lt(left.result, right.result)))))
       }
     }
     return apps
@@ -618,9 +606,9 @@ data class Lt(val left: ArithmeticExpression, val right: ArithmeticExpression) :
 data class Lte(val left: ArithmeticExpression, val right: ArithmeticExpression) :
     BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
     for (left in left.evaluate(scope, memory, pathConstraint)) {
@@ -634,19 +622,18 @@ data class Lte(val left: ArithmeticExpression, val right: ArithmeticExpression) 
           continue
         }
         val resultExp =
-          if (left.result is NumericLiteral &&
-            right.result is NumericLiteral) {
-            if (left.result.literal <= right.result.literal) True else False
-          } else {
-            Lte(left.result, right.result)
-          }
-        apps.addLast(LteOk(
-          left as ArithmeticExpressionOk,
-          right as ArithmeticExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, And(right.pc, Lte(left.result, right.result)))
-        ))
+            if (left.result is NumericLiteral && right.result is NumericLiteral) {
+              if (left.result.literal <= right.result.literal) True else False
+            } else {
+              Lte(left.result, right.result)
+            }
+        apps.addLast(
+            LteOk(
+                left as ArithmeticExpressionOk,
+                right as ArithmeticExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, And(right.pc, Lte(left.result, right.result)))))
       }
     }
     return apps
@@ -657,13 +644,13 @@ data class Lte(val left: ArithmeticExpression, val right: ArithmeticExpression) 
 
 data class And(val left: BooleanExpression, val right: BooleanExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
 
     val apps = mutableListOf<Application<BooleanExpression>>()
-    for (left in left.evaluate(scope, memory, pathConstraint)){
+    for (left in left.evaluate(scope, memory, pathConstraint)) {
       for (right in right.evaluate(scope, memory, left.pc)) {
         if (left is BooleanExpressionError) {
           apps.addLast(NestedBooleanError("AndLeftErr", left, this, And(left.pc, right.pc)))
@@ -673,24 +660,25 @@ data class And(val left: BooleanExpression, val right: BooleanExpression) : Bool
           apps.addLast(NestedBooleanError("AndRightErr", right, this, And(left.pc, right.pc)))
           continue
         }
-        val resultExp = if (left.result is True && right.result is True) {
-          True
-        } else if (left.result is True && right.result is False) {
-          False
-        } else if (left.result is False && right.result is True) {
-          False
-        } else if (left.result is False && right.result is False) {
-          False
-        } else {
-          And(left.result, right.result)
-        }
-        apps.addLast(AndOk(
-          left as BooleanExpressionOk,
-          right as BooleanExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, right.pc)
-        ))
+        val resultExp =
+            if (left.result is True && right.result is True) {
+              True
+            } else if (left.result is True && right.result is False) {
+              False
+            } else if (left.result is False && right.result is True) {
+              False
+            } else if (left.result is False && right.result is False) {
+              False
+            } else {
+              And(left.result, right.result)
+            }
+        apps.addLast(
+            AndOk(
+                left as BooleanExpressionOk,
+                right as BooleanExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -701,12 +689,12 @@ data class And(val left: BooleanExpression, val right: BooleanExpression) : Bool
 
 data class Or(val left: BooleanExpression, val right: BooleanExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
-    for (left in left.evaluate(scope, memory, pathConstraint)){
+    for (left in left.evaluate(scope, memory, pathConstraint)) {
       for (right in right.evaluate(scope, memory, left.pc)) {
         if (left is BooleanExpressionError) {
           apps.addLast(NestedBooleanError("OrLeftErr", left, this, And(left.pc, right.pc)))
@@ -716,23 +704,25 @@ data class Or(val left: BooleanExpression, val right: BooleanExpression) : Boole
           apps.addLast(NestedBooleanError("OrRightErr", right, this, And(left.pc, right.pc)))
           continue
         }
-        val resultExp = if (left.result is True && right.result is True) {
-          True
-        } else if (left.result is True && right.result is False) {
-          True
-        } else if (left.result is False && right.result is True) {
-          True
-        } else if (left.result is False && right.result is False) {
-          False
-        } else {
-          Or(left.result, right.result)
-        }
-        apps.addLast(OrOk(
-          left as BooleanExpressionOk,
-          right as BooleanExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, right.pc)))
+        val resultExp =
+            if (left.result is True && right.result is True) {
+              True
+            } else if (left.result is True && right.result is False) {
+              True
+            } else if (left.result is False && right.result is True) {
+              True
+            } else if (left.result is False && right.result is False) {
+              False
+            } else {
+              Or(left.result, right.result)
+            }
+        apps.addLast(
+            OrOk(
+                left as BooleanExpressionOk,
+                right as BooleanExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -743,12 +733,12 @@ data class Or(val left: BooleanExpression, val right: BooleanExpression) : Boole
 
 data class Imply(val left: BooleanExpression, val right: BooleanExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
-    for (left in left.evaluate(scope, memory, pathConstraint)){
+    for (left in left.evaluate(scope, memory, pathConstraint)) {
       for (right in right.evaluate(scope, memory, left.pc)) {
         if (left is BooleanExpressionError) {
           apps.addLast(NestedBooleanError("ImplyLeftErr", left, this, And(left.pc, right.pc)))
@@ -758,23 +748,25 @@ data class Imply(val left: BooleanExpression, val right: BooleanExpression) : Bo
           apps.addLast(NestedBooleanError("ImplyRightErr", right, this, And(left.pc, right.pc)))
           continue
         }
-        val resultExp = if (left.result is True && right.result is True) {
-          True
-        } else if (left.result is True && right.result is False) {
-          False
-        } else if (left.result is False && right.result is True) {
-          True
-        } else if (left.result is False && right.result is False) {
-          True
-        } else {
-          Imply(left.result, right.result)
-        }
-        apps.addLast(ImplyOk(
-          left as BooleanExpressionOk,
-          right as BooleanExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, right.pc)))
+        val resultExp =
+            if (left.result is True && right.result is True) {
+              True
+            } else if (left.result is True && right.result is False) {
+              False
+            } else if (left.result is False && right.result is True) {
+              True
+            } else if (left.result is False && right.result is False) {
+              True
+            } else {
+              Imply(left.result, right.result)
+            }
+        apps.addLast(
+            ImplyOk(
+                left as BooleanExpressionOk,
+                right as BooleanExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -785,12 +777,12 @@ data class Imply(val left: BooleanExpression, val right: BooleanExpression) : Bo
 
 data class Equiv(val left: BooleanExpression, val right: BooleanExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
-    for (left in left.evaluate(scope, memory, pathConstraint)){
+    for (left in left.evaluate(scope, memory, pathConstraint)) {
       for (right in right.evaluate(scope, memory, left.pc)) {
         if (left is BooleanExpressionError) {
           apps.addLast(NestedBooleanError("EquivLeftErr", left, this, And(left.pc, right.pc)))
@@ -800,24 +792,25 @@ data class Equiv(val left: BooleanExpression, val right: BooleanExpression) : Bo
           apps.addLast(NestedBooleanError("EquivRightErr", right, this, And(left.pc, right.pc)))
           continue
         }
-        val resultExp = if (left.result is True && right.result is True) {
-          True
-        } else if (left.result is True && right.result is False) {
-          False
-        } else if (left.result is False && right.result is True) {
-          False
-        } else if (left.result is False && right.result is False) {
-          True
-        } else {
-          Equiv(left.result, right.result)
-        }
-        apps.addLast(EquivOk(
-          left as BooleanExpressionOk,
-          right as BooleanExpressionOk,
-          this,
-          resultExp,
-          And(left.pc, right.pc)
-        ))
+        val resultExp =
+            if (left.result is True && right.result is True) {
+              True
+            } else if (left.result is True && right.result is False) {
+              False
+            } else if (left.result is False && right.result is True) {
+              False
+            } else if (left.result is False && right.result is False) {
+              True
+            } else {
+              Equiv(left.result, right.result)
+            }
+        apps.addLast(
+            EquivOk(
+                left as BooleanExpressionOk,
+                right as BooleanExpressionOk,
+                this,
+                resultExp,
+                And(left.pc, right.pc)))
       }
     }
     return apps
@@ -828,9 +821,9 @@ data class Equiv(val left: BooleanExpression, val right: BooleanExpression) : Bo
 
 data class Not(val negated: BooleanExpression) : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> {
     val apps = mutableListOf<Application<BooleanExpression>>()
     for (inner in negated.evaluate(scope, memory, pathConstraint)) {
@@ -839,13 +832,13 @@ data class Not(val negated: BooleanExpression) : BooleanExpression {
         continue
       }
       val resultExp =
-        if (inner.result is True) {
-          False
-        } else if (inner.result is False) {
-          True
-        } else {
-          Not(inner.result)
-        }
+          if (inner.result is True) {
+            False
+          } else if (inner.result is False) {
+            True
+          } else {
+            Not(inner.result)
+          }
       apps.addLast(NotOk(inner as BooleanExpressionOk, this, resultExp, inner.pc))
     }
     return apps
@@ -856,9 +849,9 @@ data class Not(val negated: BooleanExpression) : BooleanExpression {
 
 object True : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> = listOf(TrueOk(this, pathConstraint))
 
   override fun toString(): String = "true"
@@ -866,28 +859,27 @@ object True : BooleanExpression {
 
 object False : BooleanExpression {
   override fun evaluate(
-    scope: Scope,
-    memory: Memory<ArithmeticExpression>,
-    pathConstraint: BooleanExpression
+      scope: Scope,
+      memory: Memory<ArithmeticExpression>,
+      pathConstraint: BooleanExpression
   ): List<Application<BooleanExpression>> = listOf(FalseOk(this, pathConstraint))
 
   override fun toString(): String = "false"
 }
 
-fun toExpression(b : Boolean) : BooleanExpression =
-  if (b) True else False
+fun toExpression(b: Boolean): BooleanExpression = if (b) True else False
 
 // --------------------------------------------------------------------
 // Verification Expressions
 
 data class Forall(val boundVar: Variable, val expression: BooleanExpression) : BooleanExpression {
-    override fun evaluate(
+  override fun evaluate(
       scope: Scope,
       memory: Memory<ArithmeticExpression>,
       pathConstraint: BooleanExpression
-    ): List<Application<BooleanExpression>> {
-        throw Exception("forall is not meant to be evaluated.")
-    }
+  ): List<Application<BooleanExpression>> {
+    throw Exception("forall is not meant to be evaluated.")
+  }
 
   override fun toString(): String = "∀$boundVar. ($expression)"
 }
@@ -895,37 +887,42 @@ data class Forall(val boundVar: Variable, val expression: BooleanExpression) : B
 sealed interface ArrayExpression : AddressExpression
 
 object AnyArray : ArrayExpression {
-    override fun evaluate(
+  override fun evaluate(
       scope: Scope,
       memory: Memory<ArithmeticExpression>,
       pathConstraint: BooleanExpression
-    ): List<Application<Int>> {
-        throw Exception("array is not meant to be evaluated.")
-    }
+  ): List<Application<Int>> {
+    throw Exception("array is not meant to be evaluated.")
+  }
 
   override fun toString(): String = "M"
 }
 
-data class ArrayRead(val array:ArrayExpression, val index:ArithmeticExpression) : ArrayExpression {
-    override fun evaluate(
+data class ArrayRead(val array: ArrayExpression, val index: ArithmeticExpression) :
+    ArrayExpression {
+  override fun evaluate(
       scope: Scope,
       memory: Memory<ArithmeticExpression>,
       pathConstraint: BooleanExpression
-    ): List<Application<Int>> {
-        throw Exception("array read is not meant to be evaluated.")
-    }
+  ): List<Application<Int>> {
+    throw Exception("array read is not meant to be evaluated.")
+  }
 
   override fun toString(): String = "$array[$index]"
 }
 
-data class ArrayWrite(val array:ArrayExpression, val index:ArithmeticExpression, val value:ArithmeticExpression) : ArrayExpression {
-    override fun evaluate(
+data class ArrayWrite(
+    val array: ArrayExpression,
+    val index: ArithmeticExpression,
+    val value: ArithmeticExpression
+) : ArrayExpression {
+  override fun evaluate(
       scope: Scope,
       memory: Memory<ArithmeticExpression>,
       pathConstraint: BooleanExpression
-    ): List<Application<Int>> {
-        throw Exception("array write is not meant to be evaluated.")
-    }
+  ): List<Application<Int>> {
+    throw Exception("array write is not meant to be evaluated.")
+  }
 
   override fun toString(): String = "$array<$index <| $value>"
 }

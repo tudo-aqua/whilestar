@@ -88,22 +88,20 @@ class WPCProofSystem(val context: Context, val output: Output) {
         Pair(newPre2, l1 + l2)
       }
 
-    private fun wpc(stmt: Statement, post: BooleanExpression): BooleanExpression =
-        when (stmt) {
-            is While -> prepare(stmt.invariant)
-            is IfThenElse ->
-                And(
-                    Imply(prepare(stmt.cond), wpc(stmt.thenBlock, post)),
-                    Imply(Not(prepare(stmt.cond)), wpc(stmt.elseBlock, post))
-                )
-
-            is Assignment -> wpc(stmt, post)
-            is Swap -> wpc(stmt, post)
-            is Assertion -> prepare(stmt.cond)
-            is Print -> post
-            is Fail -> True
-            is Havoc -> wpc(stmt, post)
-        }
+  private fun wpc(stmt: Statement, post: BooleanExpression): BooleanExpression =
+      when (stmt) {
+        is While -> prepare(stmt.invariant)
+        is IfThenElse ->
+            And(
+                Imply(prepare(stmt.cond), wpc(stmt.thenBlock, post)),
+                Imply(Not(prepare(stmt.cond)), wpc(stmt.elseBlock, post)))
+        is Assignment -> wpc(stmt, post)
+        is Swap -> wpc(stmt, post)
+        is Assertion -> And(prepare(stmt.cond), post)
+        is Print -> post
+        is Fail -> True
+        is Havoc -> wpc(stmt, post)
+      }
 
   private fun wpc(stmt: Assignment, post: BooleanExpression): BooleanExpression =
       when (stmt.addr) {
