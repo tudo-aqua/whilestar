@@ -29,7 +29,6 @@ import tools.aqua.wvm.language.False
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
-import kotlin.math.exp
 
 class SMTSolver {
 
@@ -45,12 +44,19 @@ class SMTSolver {
     vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
   }
 
-  fun asKonstraint(expr:ArrayExpression) : Expression<*> = when (expr) {
-    is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
-    is ArrayRead -> ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index)) as Expression<IntSort>
-    is ArrayWrite -> ArrayStore(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index), asKonstraint(expr.value))
-    else -> throw Exception("oh no")
-  }
+  fun asKonstraint(expr: ArrayExpression): Expression<*> =
+      when (expr) {
+        is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+        is ArrayRead ->
+            ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index))
+                as Expression<IntSort>
+        is ArrayWrite ->
+            ArrayStore(
+                asKonstraint(expr.array) as Expression<ArraySort>,
+                asKonstraint(expr.index),
+                asKonstraint(expr.value))
+        else -> throw Exception("oh no")
+      }
 
   fun asKonstraint(expr: AddressExpression): Expression<IntSort> {
     if (expr is Variable) {
@@ -74,7 +80,8 @@ class SMTSolver {
         is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
         is ValAtAddr -> asKonstraint(expr.addr)
         is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
-        //is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as Expression<IntSort>
+      // is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as
+      // Expression<IntSort>
       }
 
   fun asKonstraint(expr: BooleanExpression): Expression<BoolSort> =
@@ -111,9 +118,9 @@ class SMTSolver {
         val progForModel = DefaultSMTProgram(commands, ctx)
         progForModel.solve()
         model =
-          progForModel.model?.definitions?.associate { it ->
-            (it.name.toString() to it.term.toString())
-          } ?: emptyMap()
+            progForModel.model?.definitions?.associate { it ->
+              (it.name.toString() to it.term.toString())
+            } ?: emptyMap()
       } catch (ex: Exception) {
         // todo: produce some output
         println("oops.")
