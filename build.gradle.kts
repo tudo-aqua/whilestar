@@ -48,7 +48,22 @@ repositories { mavenCentral() }
 dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
-  implementation("tools.aqua:konstraints:0.1")
+  implementation(
+    fileTree(mapOf(
+      "dir" to "../konstraints/konstraints-all/build/libs",
+      "include" to listOf("konstraints-all-*.jar")))
+  )
+  implementation(
+    fileTree(mapOf(
+      "dir" to "../konstraints/konstraints-core/build/libs",
+      "include" to listOf("konstraints-core-*.jar")))
+  )
+  implementation(
+    fileTree(mapOf(
+      "dir" to "../konstraints/konstraints-z3/build/libs",
+      "include" to listOf("konstraints-z3-*.jar")))
+  )
+  //implementation("tools.aqua:konstraints:0.1")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.launcher)
 }

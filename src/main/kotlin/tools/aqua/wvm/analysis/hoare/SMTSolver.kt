@@ -24,6 +24,7 @@ import tools.aqua.konstraints.smt.*
 import tools.aqua.konstraints.smt.Expression
 import tools.aqua.konstraints.theories.*
 import tools.aqua.konstraints.util.reduceOrDefault
+import tools.aqua.konstraints.solvers.z3.Z3Solver
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.False
@@ -48,18 +49,21 @@ class SMTSolver {
   }
 
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
-      when (expr) {
-        is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
-        is ArrayRead ->
-            ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index))
+    when (expr) {
+      is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+      is ArrayRead ->
+        ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index))
                 as Expression<IntSort>
-        is ArrayWrite ->
-            ArrayStore(
-                asKonstraint(expr.array) as Expression<ArraySort>,
-                asKonstraint(expr.index),
-                asKonstraint(expr.value))
-        else -> throw Exception("oh no")
-      }
+
+      is ArrayWrite ->
+        ArrayStore(
+          asKonstraint(expr.array) as Expression<ArraySort>,
+          asKonstraint(expr.index),
+          asKonstraint(expr.value)
+        )
+
+      else -> throw Exception("oh no")
+    }
 
   fun asKonstraint(expr: AddressExpression): Expression<IntSort> {
     if (expr is Variable) {
@@ -73,53 +77,56 @@ class SMTSolver {
   }
 
   fun asKonstraint(expr: ArithmeticExpression): Expression<IntSort> =
-      when (expr) {
-        is NumericLiteral -> IntLiteral(expr.literal)
-        is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Rem -> Mod(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Sub -> IntSub(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
-        is ValAtAddr -> asKonstraint(expr.addr)
-        is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
+    when (expr) {
+      is NumericLiteral -> IntLiteral(expr.literal)
+      is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
+      is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
+      is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
+      is Rem -> Mod(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Sub -> IntSub(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
+      is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
+      is ValAtAddr -> asKonstraint(expr.addr)
+      is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
       // is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as
       // Expression<IntSort>
-      }
+    }
 
   fun asKonstraint(expr: BooleanExpression): Expression<BoolSort> =
-      when (expr) {
-        is True -> tools.aqua.konstraints.theories.True
-        is False -> tools.aqua.konstraints.theories.False
-        is And ->
-            tools.aqua.konstraints.theories.And(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Or ->
-            tools.aqua.konstraints.theories.Or(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Imply -> Implies(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Equiv -> Equals(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Not -> tools.aqua.konstraints.theories.Not(asKonstraint(expr.negated))
-        is Gt -> IntGreater(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Gte -> IntGreaterEq(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Lt -> IntLess(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Lte -> IntLessEq(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Eq -> Equals(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Forall ->
-            ForallExpression(
-                listOf(SortedVar(Symbol(expr.boundVar.name), IntSort)),
-                asKonstraint(expr.expression))
-      }
+    when (expr) {
+      is True -> tools.aqua.konstraints.theories.True
+      is False -> tools.aqua.konstraints.theories.False
+      is And ->
+        tools.aqua.konstraints.theories.And(asKonstraint(expr.left), asKonstraint(expr.right))
+
+      is Or ->
+        tools.aqua.konstraints.theories.Or(asKonstraint(expr.left), asKonstraint(expr.right))
+
+      is Imply -> Implies(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Equiv -> Equals(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Not -> tools.aqua.konstraints.theories.Not(asKonstraint(expr.negated))
+      is Gt -> IntGreater(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Gte -> IntGreaterEq(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Lt -> IntLess(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Lte -> IntLessEq(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Eq -> Equals(asKonstraint(expr.left), asKonstraint(expr.right))
+      is Forall ->
+        ForallExpression(
+          listOf(SortedVar(Symbol(expr.boundVar.name), IntSort)),
+          asKonstraint(expr.expression)
+        )
+    }
 
   fun solve(expr: BooleanExpression): Result {
     val oldModels =
-        seenModels
+      seenModels
+        .map {
+          it.entries
             .map {
-              it.entries
-                  .map {
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
-                  }
-                  .reduce<BooleanExpression, Eq> { acc, eq -> And(acc, eq) }
+              Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
             }
-            .reduceOrDefault(False) { exp1, exp2 -> Or(exp1, exp2) }
+            .reduce<BooleanExpression, Eq> { acc, eq -> And(acc, eq) }
+        }
+        .reduceOrDefault(False) { exp1, exp2 -> Or(exp1, exp2) }
     val konstraint = asKonstraint(And(expr, Not(oldModels)))
     var commands = vars.values + Assert(konstraint) + CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
@@ -131,9 +138,9 @@ class SMTSolver {
         val progForModel = DefaultSMTProgram(commands, ctx)
         progForModel.solve()
         model =
-            progForModel.model?.definitions?.associate { it ->
-              (it.name.toString() to it.term.toString())
-            } ?: emptyMap()
+          progForModel.model?.definitions?.associate { it ->
+            (it.name.toString() to it.term.toString())
+          } ?: emptyMap()
         seenModels.addLast(model)
         // println(model)
       } catch (ex: Exception) {
@@ -142,5 +149,12 @@ class SMTSolver {
       }
     }
     return Result(smtProgram.status, model)
+  }
+
+  fun simplify(expr: BooleanExpression): Expression<BoolSort> {
+    val term = asKonstraint(expr)
+    val z3 = Z3Solver()
+    val termSimplified = z3.simplify(term)
+    return termSimplified
   }
 }
