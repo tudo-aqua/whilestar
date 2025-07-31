@@ -154,7 +154,7 @@ class SMTSolver {
   fun simplify(expr: BooleanExpression): Expression<BoolSort> {
     val term = asKonstraint(expr)
     val z3 = Z3Solver()
-    val termSimplified = z3.simplify(term)
+    val termSimplified = z3.simplify(vars.values.toList(), term)
     return termSimplified
   }
 }
