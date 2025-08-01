@@ -20,6 +20,7 @@ package tools.aqua.wvm.language
 
 import java.math.BigInteger
 import tools.aqua.konstraints.smt.SatStatus
+import tools.aqua.konstraints.theories.BoolSort
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.semantics.*
 import tools.aqua.wvm.machine.Memory
@@ -38,6 +39,11 @@ sealed interface ArithmeticExpression : Expression<ArithmeticExpression>
 sealed interface AddressExpression : Expression<Int>
 
 sealed interface BooleanExpression : Expression<BooleanExpression>
+
+fun BooleanExpression.simplify() : BooleanExpression {
+  val solver = SMTSolver()
+  return solver.simplify(this)
+}
 
 // Address Expressions
 

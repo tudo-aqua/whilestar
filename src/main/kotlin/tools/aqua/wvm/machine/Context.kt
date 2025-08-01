@@ -77,7 +77,7 @@ data class Context(
     }
 
     if (verbose) println("end.")
-    print(root.flatten().size)
+    print("Size: ${root.flatten().size}")
     if (symbolic) {
       return Pair(root, root.unsafePaths(post))
     } else {

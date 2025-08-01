@@ -116,7 +116,126 @@ class SMTSolver {
         )
     }
 
+  fun asExpression(expr: Expression<*>): tools.aqua.wvm.language.Expression<*> =
+    when (expr) {
+      is UserDeclaredExpression ->
+        if (expr.sort == ArraySort(IntSort, IntSort)) {
+          AnyArray
+        } else if (expr.sort == IntSort) {
+          ValAtAddr(Variable(expr.name.value))
+        } else {
+          throw Exception("Unkown UserDeclaredExpression $expr")
+        }
+      is ArraySelect ->
+        ArrayRead(
+          asExpression(expr.array) as ArrayExpression,
+          asExpression(expr.index) as ArithmeticExpression)
+      is ArrayStore ->
+        ArrayWrite(
+          asExpression(expr.array) as ArrayExpression,
+          asExpression(expr.index) as ArithmeticExpression,
+          asExpression(expr.value) as ArithmeticExpression
+        )
+      is IntLiteral ->
+        NumericLiteral(expr.value)
+      is IntAdd ->
+        Add(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is IntDiv ->
+        Div(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is IntMul ->
+        Mul(
+          asExpression(expr.factors[0]) as ArithmeticExpression,
+          asExpression(expr.factors[1]) as ArithmeticExpression
+        )
+      is Mod ->
+        Rem(
+          asExpression(expr.dividend) as ArithmeticExpression,
+          asExpression(expr.divisor) as ArithmeticExpression
+        )
+      is IntSub ->
+        Sub(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is IntNeg ->
+        UnaryMinus(
+          asExpression(expr.inner) as ArithmeticExpression
+        )
+      is tools.aqua.konstraints.theories.True ->
+        True
+      is tools.aqua.konstraints.theories.False ->
+        False
+      is tools.aqua.konstraints.theories.And ->
+        And(
+          asExpression(expr.conjuncts[0]) as BooleanExpression,
+          asExpression(expr.conjuncts[1]) as BooleanExpression
+        )
+      is tools.aqua.konstraints.theories.Or ->
+        Or(
+          asExpression(expr.disjuncts[0])as BooleanExpression,
+          asExpression(expr.disjuncts[1]) as BooleanExpression
+        )
+      is Implies ->
+        Imply(
+          asExpression(expr.children[0]) as BooleanExpression,
+          asExpression(expr.children[1]) as BooleanExpression
+        )
+      is Equals ->
+        Equiv(
+          asExpression(expr.children[0]) as BooleanExpression,
+          asExpression(expr.children[1]) as BooleanExpression
+        )
+      is tools.aqua.konstraints.theories.Not ->
+        Not(
+          asExpression(expr.inner) as BooleanExpression
+        )
+      is IntGreater ->
+        Gt(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is IntGreaterEq ->
+        Gte(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is IntLess ->
+        Lt(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is IntLessEq ->
+        Lte(
+          asExpression(expr.terms[0]) as ArithmeticExpression,
+          asExpression(expr.terms[1]) as ArithmeticExpression
+        )
+      is Equals ->
+        Eq(
+          asExpression(expr.children[0]) as ArithmeticExpression,
+          asExpression(expr.children[1]) as ArithmeticExpression,
+          0
+        )
+      is ForallExpression ->
+        Forall(
+          Variable(expr.vars[0].name.value),
+          asExpression(expr.term) as BooleanExpression
+        )
+      else -> throw Exception("oh no")
+    }
+
+
   fun solve(expr: BooleanExpression): Result {
+    val konstraint = asKonstraint(expr)
+    return solve(konstraint)
+  }
+
+  fun solve(expr: Expression<BoolSort>): Result {
     val oldModels =
       seenModels
         .map {
@@ -127,7 +246,8 @@ class SMTSolver {
             .reduce<BooleanExpression, Eq> { acc, eq -> And(acc, eq) }
         }
         .reduceOrDefault(False) { exp1, exp2 -> Or(exp1, exp2) }
-    val konstraint = asKonstraint(And(expr, Not(oldModels)))
+    val konstraint =
+      tools.aqua.konstraints.theories.And(expr, asKonstraint(Not(oldModels)))
     var commands = vars.values + Assert(konstraint) + CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
     var model = emptyMap<String, String>()
@@ -151,8 +271,15 @@ class SMTSolver {
     return Result(smtProgram.status, model)
   }
 
-  fun simplify(expr: BooleanExpression): Expression<BoolSort> {
+  fun simplify(expr: BooleanExpression): BooleanExpression {
+
     val term = asKonstraint(expr)
+    val termSimplified = simplify(term)
+
+    return asExpression(termSimplified) as BooleanExpression
+  }
+
+  fun simplify(term: Expression<BoolSort>) : Expression<BoolSort> {
     val z3 = Z3Solver()
     val termSimplified = z3.simplify(vars.values.toList(), term)
     return termSimplified

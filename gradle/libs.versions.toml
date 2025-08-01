@@ -35,3 +35,4 @@ junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version =
 junit-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "1.10.2" }
 kotlin-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.7.1" }
 petitparser-core = { group = "com.github.petitparser", name = "petitparser-core", version = "2.4.0" }
+z3-turnkey = { group = "tools.aqua", name = "z3-turnkey", version = "4.13.0" }

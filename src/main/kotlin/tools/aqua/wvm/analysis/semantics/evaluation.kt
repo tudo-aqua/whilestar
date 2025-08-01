@@ -18,10 +18,19 @@
 
 package tools.aqua.wvm.analysis.semantics
 
+import tools.aqua.konstraints.theories.BoolSort
 import java.math.BigInteger
 import tools.aqua.wvm.language.*
+import tools.aqua.konstraints.smt.Expression as KExpression
+import tools.aqua.wvm.analysis.hoare.SMTSolver
 
-sealed class Application<T>(val result: T, val pc: BooleanExpression)
+
+sealed class Application<T>(val result: T, var pc: BooleanExpression) {
+
+    init {
+        pc = pc.simplify()
+    }
+}
 
 sealed interface Error {
   fun getError(): String

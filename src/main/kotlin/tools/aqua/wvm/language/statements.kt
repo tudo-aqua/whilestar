@@ -306,8 +306,8 @@ data class IfThenElse(
                                 cfg.scope,
                                 cfg.memory,
                                 false,
-                                b.pc)),
-                    b.pc))
+                                cfg.pathConstraint)),
+                    cfg.pathConstraint))
         else -> {
           val smtSolver1 = SMTSolver()
           val constraint1 = And(b.pc, b.result)
@@ -374,7 +374,7 @@ data class While(
         if (cond is Error) {
           apps.addLast(
               NestedStatementError(
-                  "IfErr",
+                  "WhileErr",
                   cond,
                   this,
                   Transition(
@@ -392,7 +392,7 @@ data class While(
         if (invar is Error) {
           apps.addLast(
               NestedStatementError(
-                  "IfErr",
+                  "WhileErr",
                   invar,
                   this,
                   Transition(
@@ -438,8 +438,8 @@ data class While(
                                   cfg.scope,
                                   cfg.memory,
                                   false,
-                                  And(cond.pc, invar.pc))),
-                      And(cond.pc, invar.pc)))
+                                  cfg.pathConstraint)),
+                      cfg.pathConstraint))
           (True to False) ->
               apps.addLast(
                   WhInvar(
@@ -454,8 +454,8 @@ data class While(
                                   cfg.scope,
                                   cfg.memory,
                                   true,
-                                  And(cond.pc, invar.pc))),
-                      And(cond.pc, invar.pc)))
+                                  cfg.pathConstraint)),
+                      cfg.pathConstraint))
           (False to False) ->
               apps.addLast(
                   WhInvar(
@@ -470,8 +470,8 @@ data class While(
                                   cfg.scope,
                                   cfg.memory,
                                   true,
-                                  And(cond.pc, invar.pc))),
-                      And(cond.pc, invar.pc)))
+                                  cfg.pathConstraint)),
+                      cfg.pathConstraint))
           else -> {
             val smtSolver1 = SMTSolver()
             val constraint1 = And(cfg.pathConstraint, cond.result)
@@ -632,6 +632,23 @@ data class Print(val message: String, val values: List<ArithmeticExpression>) : 
     }
     val valueCombinations = valuesL.multiply()
     val apps = mutableListOf<StatementApp>()
+    if (valueCombinations.isEmpty()) {
+      apps.addLast(
+        PrintOk(
+          listOf(),
+          this,
+          Transition(
+            cfg,
+            output = message,
+            dst =
+            Configuration(
+              SequenceOfStatements(cfg.statements.tail()),
+              cfg.scope,
+              cfg.memory,
+              false,
+              cfg.pathConstraint)),
+          cfg.pathConstraint))
+    }
     for (comb in valueCombinations) {
       val combPC = comb.map { it.pc }.reduce { acc, exp -> And(acc, exp) }
       if (comb.any { it is Error }) {
@@ -652,6 +669,7 @@ data class Print(val message: String, val values: List<ArithmeticExpression>) : 
       if (comb.isNotEmpty()) {
         out += comb.map { it.result }.joinToString(", ", " [", "]")
       }
+
       apps.addLast(
           PrintOk(
               comb.map { it as ArithmeticExpressionOk },

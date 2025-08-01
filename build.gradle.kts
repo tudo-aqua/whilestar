@@ -48,6 +48,7 @@ repositories { mavenCentral() }
 dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
+  implementation(libs.z3.turnkey)
   implementation(
     fileTree(mapOf(
       "dir" to "../konstraints/build/libs",
