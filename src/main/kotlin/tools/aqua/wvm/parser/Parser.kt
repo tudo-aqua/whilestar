@@ -277,15 +277,13 @@ object Parser {
 
   private val typeSize =
       (lsbr * numeral * rsbr).map { results: List<Any> ->
-	val arraySize = (results[1] as String).toInt()
-	if (arraySize <= arraySizeLimit) {   
-            Pair(
-		arraySize + 1, /* +1 for the pointer to the data */
-		Pointer(BasicType.INT))
-	} else {
-	    throw Exception("Type size is limited to ${arraySizeLimit + 1}, $arraySize + 1 requested")
-	}
-	} + star.star().map { results: List<Any> -> Pair(1, buildType(results.size)) }
+        val arraySize = (results[1] as String).toInt()
+        if (arraySize <= arraySizeLimit) {
+          Pair(arraySize + 1, /* +1 for the pointer to the data */ Pointer(BasicType.INT))
+        } else {
+          throw Exception("Type size is limited to ${arraySizeLimit + 1}, $arraySize + 1 requested")
+        }
+      } + star.star().map { results: List<Any> -> Pair(1, buildType(results.size)) }
 
   private val decl =
       (intKW * typeSize * identifier * semicolon).map { results: List<Any> ->

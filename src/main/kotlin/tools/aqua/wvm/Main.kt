@@ -25,6 +25,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
+import tools.aqua.wvm.analysis.bmc.BMCSafetyChecker
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
 import tools.aqua.wvm.language.SequenceOfStatements
@@ -42,6 +43,8 @@ class While : CliktCommand() {
   private val proof: Boolean by
       option("-p", "--proof", help = "proof (instead of execution)").flag()
 
+  private val bmc: Boolean by option("-b", "--bmc", help = "run bmc checker").flag()
+
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
@@ -49,7 +52,7 @@ class While : CliktCommand() {
 
   override fun run() {
 
-    if (!run && !typecheck && !proof) {
+    if (!run && !typecheck && !proof && !bmc) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -71,6 +74,7 @@ class While : CliktCommand() {
       }
 
       if (typecheck) {
+        println("=========== Running type checker: ===========")
         println("==== generating type correctness proof: =====")
         val checker = TypeChecker(context.scope)
         // println(SequenceOfStatements(context.program))
@@ -82,13 +86,26 @@ class While : CliktCommand() {
       }
 
       if (proof) {
+        println("=========== Running proof system: ===========")
         val out = Output()
         val wps = WPCProofSystem(context, out)
         wps.proof()
+        println("=============================================")
+      }
+
+      if (bmc) {
+        println("=========== Running BMC checker: ===========")
+        val out = Output()
+        val bmcChecker = BMCSafetyChecker(context, out)
+        //val success = bmcChecker.check()
+        // println("BMC Safety Checker is not yet implemented.")
+        println("=============================================")
       }
 
       if (run) {
+        println("============ Running program: ===============")
         val trace = context.execute(verbose)
+        println("=============================================")
       }
     } catch (e: Exception) {
       println("ERROR: ${e.message}")
