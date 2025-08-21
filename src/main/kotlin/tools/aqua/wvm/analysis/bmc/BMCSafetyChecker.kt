@@ -18,32 +18,59 @@
 
 package tools.aqua.wvm.analysis.bmc
 
+import tools.aqua.konstraints.smt.SatStatus
+import tools.aqua.konstraints.util.reduceOrDefault
+import tools.aqua.wvm.analysis.hoare.Entailment
+import tools.aqua.wvm.analysis.hoare.SMTSolver
+import tools.aqua.wvm.language.And
+import tools.aqua.wvm.language.True
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 
-class BMCSafetyChecker(val context: Context, val out: Output = Output()) {
-  val transitionSystem = TransitionSystem(context)
+class BMCSafetyChecker(
+    val context: Context,
+    val out: Output = Output(),
+    val verbose: Boolean = false
+) {
+  val transitionSystem = TransitionSystem(context, verbose)
 
   fun check(max_bound: Int = 10): Boolean {
     var success = true
-    // Implement the BMC safety checking logic here
-    // This is a placeholder for the actual implementation
-    out.println("BMC Safety Checker is not yet implemented.")
-
     // TODO: Build Transition System
+    // Done above
 
     // TODO: Check for safety violations
     // while loop for increasing bound
-    for (bound in 1..max_bound) {
+    for (bound in 0..max_bound) {
+      out.println("=== Checking ${bound}-safety: ===")
+      var initAndTransitions = transitionSystem.zeroedInitial()
+      if (bound > 0) {
+        val transitions =
+            (1..bound)
+                .map { transitionSystem.numberedTransitions(it - 1, it) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }
+        initAndTransitions = And(initAndTransitions, transitions)
+      }
+      val properties =
+          (0..bound)
+              .map { transitionSystem.numberedInvariant(it) }
+              .reduceOrDefault(True) { acc, next -> And(acc, next) }
+      val test = Entailment(initAndTransitions, properties, "BMC safety check for bound $bound")
+      if (verbose) out.println("SMT test for BMC: $test")
+      val result = SMTSolver().solve(test.smtTest())
 
-      out.println("Checking ${bound}-safety:")
-      // TODO: Generate konstraints for the current bound
-      // Put into SMT solver
-      // TODO: Check satisfiability
-      // if (satisfiable) {
-      val sat = true
-      out.println("${bound}-safety is ${if (sat) "violated" else "fulfilled"}.")
-      success = success and !sat
+      success = success and (result.status == SatStatus.UNSAT)
+      out.println(
+          "BMC result: $bound-safety " +
+              when (result.status) {
+                SatStatus.UNSAT -> "is fulfilled."
+                SatStatus.SAT -> "is violated. Counterexample: ${result.model}"
+                SatStatus.UNKNOWN -> "could not be decided.."
+                SatStatus.PENDING -> "exited with an error during solving."
+              })
+      if (result.status != SatStatus.UNSAT) {
+        success = false
+      }
       if (!success) break
     }
 

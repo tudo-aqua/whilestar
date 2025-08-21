@@ -23,43 +23,45 @@ import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 
-class TransitionSystem(val context: Context) {
+class TransitionSystem(val context: Context, val verbose: Boolean = false) {
   // Possible system states s\in S_{V,\mu}
   val vars: List<String> = context.scope.symbols.map { it.key } // V
   var initial: BooleanExpression = True // all vars are zero // I
   var transitions: BooleanExpression = True // transition relation //\Gamma
+  var invariant: BooleanExpression = True
 
-  data class LocationID(var id: Int, var next: List<Int>? = null)
+  data class LocationID(var id: Int)
+
+  val locId = LocationID(0)
 
   init {
-    // initial condition: All variables are zero
+    if (verbose) println("Variables: $vars")
+    // Initial condition: All variables are zero and the location is 0 TODO: And precondition??
+    initial = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
     for (entry in vars) {
-      val varIsZero =
-          Eq(
-              ValAtAddr(Variable(entry)), // TODO: Does this work?
-              NumericLiteral(0.toBigInteger()),
-              0)
-      initial =
-          when (initial) {
-            True -> varIsZero
-            else -> And(initial, varIsZero)
-          }
+      val varIsZero = Eq(ValAtAddr(Variable(entry)), NumericLiteral(0.toBigInteger()), 0)
+      initial = And(initial, varIsZero)
     }
-    println("Variables: $vars")
-    println("Initial condition: $initial")
-    println("Initial as Konstraint: ${SMTSolver().asKonstraint(initial)}")
-    // val initial_konstraint = SMTSolver().asKonstraint(initial)
+    if (verbose) println("Initial condition: $initial")
+    val initialKonstraint = SMTSolver().asKonstraint(initial)
+    if (verbose) println("Initial as Konstraint: $initialKonstraint")
 
     // Transition relation
-    var locId = LocationID(0)
-    // for (statement in context.program) {
-    //    val statementFormula = transitionForStatement(statement, locId)
-    //    print("Transition for $statement: $statementFormula\n")
-    // }
     transitions = transitionForStatements(context.program, locId)
-    println("Transition relation: $transitions")
-    println(
-        "Transition relation as Konstraint: ${SMTSolver().asKonstraint(numberedTransitions(0, 1))}")
+    if (verbose) println("Transition relation: $transitions")
+    // val transitionKonstraint = SMTSolver().asKonstraint(numberedTransitions(0, 1))
+    // println("Transition relation as Konstraint: $transitionKonstraint")
+
+    // Invariant: Either not at the end or the postcondition holds
+    // TODO: Maybe change this to have a property that is checked every step as well (with a flag)
+    invariant =
+        Or(
+            Not(Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)),
+            numberedTransitions(
+                context.post,
+                locId.id - 1,
+                0)) // TODO: This is the exit location. Should it be the current locaion?
+    if (verbose) println("Invariant: $invariant")
   }
 
   private fun transitionForStatements(
@@ -70,6 +72,8 @@ class TransitionSystem(val context: Context) {
         .map { transitionForStatement(it, locId) }
         .reduceOrDefault(True) { acc, next -> Or(acc, next) }
   }
+
+  // TODO: Make this a function per statement type
 
   @Suppress("DuplicatedCode")
   private fun transitionForStatement(
@@ -212,19 +216,21 @@ class TransitionSystem(val context: Context) {
     }
   }
 
-  fun changeLocation(expr: BooleanExpression, currentId: Int, newId: Int): BooleanExpression {
+  // TODO: Clean this up! It works, but is not very readable. (And operations like Gt, Gte, etc. are
+  // missing for invariant)
+
+  private fun changeLocation(
+      expr: BooleanExpression,
+      currentId: Int,
+      newId: Int
+  ): BooleanExpression {
     return when (expr) {
       is Eq -> {
         if (expr.left is ValAtAddr &&
-            (expr.left.addr as Variable).name == "loc" &&
+            ((expr.left.addr as Variable).name == "loc" || expr.left.addr.name == "loc'") &&
             expr.right is NumericLiteral &&
             expr.right.literal == currentId.toBigInteger()) {
-          Eq(ValAtAddr(Variable("loc")), NumericLiteral(newId.toBigInteger()), 0)
-        } else if (expr.left is ValAtAddr &&
-            (expr.left.addr as Variable).name == "loc'" &&
-            expr.right is NumericLiteral &&
-            expr.right.literal == currentId.toBigInteger()) {
-          Eq(ValAtAddr(Variable("loc'")), NumericLiteral(newId.toBigInteger()), 0)
+          Eq(ValAtAddr(Variable(expr.left.addr.name)), NumericLiteral(newId.toBigInteger()), 0)
         } else {
           expr
         }
@@ -246,7 +252,41 @@ class TransitionSystem(val context: Context) {
     return numberedTransitions(transitions, from, to)
   }
 
-  fun numberedTransitions(expr: BooleanExpression, from: Int, to: Int): BooleanExpression {
+  fun zeroedInitial(from: Int = 0): BooleanExpression {
+    return numberedTransitions(initial, from, from)
+  }
+
+  fun numberedInvariant(loc: Int): BooleanExpression {
+    return numberedInvariant(invariant, loc)
+  }
+
+  private fun numberedInvariant(expr: BooleanExpression, loc: Int): BooleanExpression {
+    return when (expr) {
+      is Eq ->
+          Eq(
+              if (expr.left is ValAtAddr &&
+                  expr.left.addr is Variable &&
+                  expr.left.addr.name == "loc") {
+                ValAtAddr(Variable("loc$loc"))
+              } else {
+                expr.left
+              },
+              if (expr.right is ValAtAddr &&
+                  expr.right.addr is Variable &&
+                  expr.right.addr.name == "loc") {
+                ValAtAddr(Variable("loc$loc"))
+              } else {
+                expr.right
+              },
+              0)
+      is And -> And(numberedInvariant(expr.left, loc), numberedInvariant(expr.right, loc))
+      is Or -> Or(numberedInvariant(expr.left, loc), numberedInvariant(expr.right, loc))
+      is Not -> Not(numberedInvariant(expr.negated, loc))
+      else -> expr // Other expressions are not handled here
+    }
+  }
+
+  private fun numberedTransitions(expr: BooleanExpression, from: Int, to: Int): BooleanExpression {
     return when (expr) {
       is Eq ->
           Eq(
@@ -261,7 +301,7 @@ class TransitionSystem(val context: Context) {
               },
               if (expr.right is ValAtAddr && expr.right.addr is Variable) {
                 if (expr.right.addr.name.contains("'")) {
-                  ValAtAddr(Variable("${expr.right.addr.name.replace("'", "") }${to}"))
+                  ValAtAddr(Variable("${expr.right.addr.name.replace("'", "")}${to}"))
                 } else {
                   ValAtAddr(Variable("${expr.right.addr.name}${from}"))
                 }
