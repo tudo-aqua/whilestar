@@ -36,11 +36,7 @@ class BMCSafetyChecker(
 
   fun check(max_bound: Int = 10): Boolean {
     var success = true
-    // TODO: Build Transition System
-    // Done above
 
-    // TODO: Check for safety violations
-    // while loop for increasing bound
     for (bound in 0..max_bound) {
       out.println("=== Checking ${bound}-safety: ===")
       var initAndTransitions = transitionSystem.zeroedInitial()
