@@ -25,7 +25,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
-import tools.aqua.wvm.analysis.bmc.BMCSafetyChecker
+import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
 import tools.aqua.wvm.language.SequenceOfStatements
@@ -97,7 +97,7 @@ class While : CliktCommand() {
         println("=========== Running BMC checker: ===========")
         val out = Output()
         val bmcChecker = BMCSafetyChecker(context, out, verbose)
-        bmcChecker.check(max_bound = 10)
+        bmcChecker.check(maxBound = 10)
         println("=============================================")
       }
 

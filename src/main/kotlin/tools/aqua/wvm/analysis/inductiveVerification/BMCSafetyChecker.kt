@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package tools.aqua.wvm.analysis.bmc
+package tools.aqua.wvm.analysis.inductiveVerification
 
 import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.konstraints.util.reduceOrDefault
@@ -34,10 +34,10 @@ class BMCSafetyChecker(
 ) {
   val transitionSystem = TransitionSystem(context, verbose)
 
-  fun check(max_bound: Int = 10): Boolean {
+  fun check(maxBound: Int = 10): Boolean {
     var success = true
 
-    for (bound in 0..max_bound) {
+    for (bound in 0..maxBound) {
       out.println("=== Checking ${bound}-safety: ===")
       var initAndTransitions = transitionSystem.zeroedInitial()
       if (bound > 0) {

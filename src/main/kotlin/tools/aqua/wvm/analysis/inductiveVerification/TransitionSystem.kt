@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package tools.aqua.wvm.analysis.bmc
+package tools.aqua.wvm.analysis.inductiveVerification
 
 import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.language.*
