@@ -25,8 +25,9 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
-import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
+import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
+import tools.aqua.wvm.analysis.inductiveVerification.KInductionChecker
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
 import tools.aqua.wvm.language.SequenceOfStatements
 import tools.aqua.wvm.machine.Output
@@ -45,6 +46,8 @@ class While : CliktCommand() {
 
   private val bmc: Boolean by option("-b", "--bmc", help = "run bmc checker").flag()
 
+  private val kInd: Boolean by option("-k", "--kind", help = "run k-induction checker").flag()
+
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
@@ -52,7 +55,7 @@ class While : CliktCommand() {
 
   override fun run() {
 
-    if (!run && !typecheck && !proof && !bmc) {
+    if (!run && !typecheck && !proof && !bmc && !kInd) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -98,6 +101,14 @@ class While : CliktCommand() {
         val out = Output()
         val bmcChecker = BMCSafetyChecker(context, out, verbose)
         bmcChecker.check(maxBound = 10)
+        println("=============================================")
+      }
+
+      if (kInd) {
+        println("======== Running k-induction checker: =======")
+        val out = Output()
+        val kIndChecker = KInductionChecker(context, out, verbose)
+        kIndChecker.check(kBound = 10)
         println("=============================================")
       }
 
