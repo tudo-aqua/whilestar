@@ -23,6 +23,8 @@ import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.analysis.hoare.Entailment
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
+import tools.aqua.wvm.language.BooleanExpression
+import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.True
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
@@ -71,7 +73,7 @@ class KInductionChecker(
           when (baseResult.status) {
             SatStatus.UNSAT -> "Base case passed."
             SatStatus.SAT ->
-                "Base case failed. ${k-1}-safety does not hold. Counterexample: ${baseResult.model}"
+                "Base case failed. ${k-1}-safety does not hold. Counterexample: ${baseResult.model.toSortedMap()}"
             SatStatus.UNKNOWN -> "Base case could not be decided."
             SatStatus.PENDING -> "Error during SMT solving of base case."
           })
@@ -102,4 +104,67 @@ class KInductionChecker(
 
     return false // could not prove safety for any k <= kBound
   }
+    
+    fun checkWithBMC(kBound: Int = 10): Boolean {
+        // Start with BMC 0:
+        out.println("=== BMC 0 ===")
+        val bmc0 = And(transitionSystem.zeroedInitial(), Not(transitionSystem.numberedInvariant(0)))
+        if (verbose) out.println("SMT test for BMC 0: $bmc0")
+        val bmc0Result = SMTSolver().solve(bmc0)
+        out.println(
+            when (bmc0Result.status) {
+              SatStatus.UNSAT -> "BMC 0 passed."
+              SatStatus.SAT ->
+                  "BMC 0 failed. 0-safety does not hold. Counterexample: ${bmc0Result.model.toSortedMap()}"
+              SatStatus.UNKNOWN -> "BMC 0 could not be decided."
+              SatStatus.PENDING -> "Error during SMT solving of BMC 0."
+            })
+        if (bmc0Result.status != SatStatus.UNSAT) return false
+
+        // ----------------------------------------
+
+        var test: BooleanExpression = True
+
+        for (k in 1..kBound) {
+            out.println("=== K-Induction with BMC, k = $k ===")
+            test = And(test, And(transitionSystem.numberedTransitions(k-1, k), transitionSystem.numberedInvariant(k-1)))
+            val property = transitionSystem.numberedInvariant(k)
+            // BMC-k and also already k-induction basis for k+1
+            val basis = And(test, And(transitionSystem.zeroedInitial(), Not(property)))
+            if (verbose) out.println("SMT test for BMC-$k / $k-induction basis: $basis")
+            var result = SMTSolver().solve(basis)
+            out.println(
+                when (result.status) {
+                    SatStatus.UNSAT -> "BMC-$k / $k-induction basis passed."
+                    SatStatus.SAT -> "BMC-$k failed. Counterexample: ${result.model.toSortedMap()}"
+                    SatStatus.UNKNOWN -> "BMC / $k-induction basis could not be decided."
+                    SatStatus.PENDING -> "Error during SMT solving of BMC / $k-induction basis."
+                })
+            if (result.status != SatStatus.UNSAT) return false
+            // Depth check for (k+1)-induction step
+            result = SMTSolver().solve(test)
+            out.println(
+                when (result.status) {
+                    SatStatus.SAT -> "Depth check passed."
+                    SatStatus.UNSAT -> "Depth check failed. Program may be shorter than k = $k."
+                    SatStatus.UNKNOWN -> "Depth check could not be decided."
+                    SatStatus.PENDING -> "Error during SMT solving of depth check."
+                })
+            if (result.status != SatStatus.SAT) return false
+            // k-induction step
+            val step = And(test, Not(property))
+            if (verbose) out.println("SMT test for $k-induction step: $step")
+            result = SMTSolver().solve(step)
+            out.println(
+                when (result.status) {
+                    SatStatus.UNSAT -> "Inductive step passed. Program is safe by k-induction with k = $k."
+                    SatStatus.SAT -> "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${result.model.toSortedMap()}"
+                    SatStatus.UNKNOWN -> "Inductive step could not be decided."
+                    SatStatus.PENDING -> "Error during SMT solving of inductive step."
+                })
+            if (result.status == SatStatus.UNSAT) return true
+        }
+        return false  // could not prove safety
+    }
+
 }
