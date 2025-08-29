@@ -35,12 +35,13 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
 
   init {
     if (verbose) println("Variables: $vars")
-    // Initial condition: All variables are zero and the location is 0 TODO: And precondition??
+    // Initial condition: All variables are zero and the location is 0 and precondition holds
     initial = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
     for (entry in vars) {
       val varIsZero = Eq(ValAtAddr(Variable(entry)), NumericLiteral(0.toBigInteger()), 0)
       initial = And(initial, varIsZero)
     }
+    initial = And(initial, context.pre)
     if (verbose) println("Initial condition: $initial")
 
     // Transition relation
