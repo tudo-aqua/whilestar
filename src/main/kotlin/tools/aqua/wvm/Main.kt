@@ -33,6 +33,8 @@ import tools.aqua.wvm.language.SequenceOfStatements
 import tools.aqua.wvm.machine.Output
 import tools.aqua.wvm.parser.Parser
 
+var externCounter: Int = 0
+
 class While : CliktCommand() {
 
   private val verbose: Boolean by option("-v", "--verbose", help = "enable verbose mode").flag()
@@ -40,6 +42,8 @@ class While : CliktCommand() {
   private val run: Boolean by option("-r", "--run", help = "run the code").flag()
 
   private val typecheck: Boolean by option("-t", "--typecheck", help = "run type check").flag()
+
+  private val symbolic: Boolean by option("-s", "--symbolic", help = "run code symbolicly").flag()
 
   private val proof: Boolean by
       option("-p", "--proof", help = "proof (instead of execution)").flag()
@@ -55,7 +59,7 @@ class While : CliktCommand() {
 
   override fun run() {
 
-    if (!run && !typecheck && !proof && !bmc && !kInd) {
+    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -71,8 +75,8 @@ class While : CliktCommand() {
         println("=============================================")
         println(context.scope)
         println(SequenceOfStatements(context.program).toIndentedString(""))
-        println(context.pre)
-        println(context.post)
+        println("Pre-Condition: " + context.pre)
+        println("Post-Condition: " + context.post)
         println("=============================================")
       }
 
@@ -114,7 +118,21 @@ class While : CliktCommand() {
 
       if (run) {
         println("============ Running program: ===============")
-        val trace = context.execute(verbose)
+        val trace = context.execute(verbose || symbolic, symbolic)
+        if (verbose) {
+          println("Execution Tree:")
+          print(trace.first.toIndentString(""))
+        }
+        if (symbolic) {
+          if (verbose) {
+            println("Unsafe leaf nodes:")
+            for (leaf in trace.second) {
+              println("====================")
+              println(leaf.toIndentString(""))
+            }
+          }
+          println("The program is ${if (trace.second.isEmpty()) "" else "un"}safe.")
+        }
         println("=============================================")
       }
     } catch (e: Exception) {

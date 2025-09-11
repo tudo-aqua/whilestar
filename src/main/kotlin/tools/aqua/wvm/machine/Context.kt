@@ -20,50 +20,94 @@ package tools.aqua.wvm.machine
 
 import java.math.BigInteger
 import java.util.Scanner
-import tools.aqua.wvm.analysis.semantics.StatementApp
-import tools.aqua.wvm.language.BooleanExpression
-import tools.aqua.wvm.language.SequenceOfStatements
-import tools.aqua.wvm.language.Statement
-import tools.aqua.wvm.language.True
+import tools.aqua.wvm.analysis.semantics.BooleanExpressionError
+import tools.aqua.wvm.language.*
 
 data class Context(
     val scope: Scope,
     val program: List<Statement>,
     val pre: BooleanExpression = True,
     val post: BooleanExpression = True,
-    var input: Scanner? = null
+    var input: Scanner? = null,
 ) {
-  fun execute(verbose: Boolean, output: Output = Output(), maxSteps: Int = -1): List<StatementApp> {
-    var cfg = Configuration(SequenceOfStatements(program), scope, initMemForScope())
-    var trace = listOf<StatementApp>()
-    var stepCount = 0
-    if (verbose) println(cfg)
-    while (!cfg.isFinal()) {
-      stepCount++
-      if (maxSteps in 1 ..< stepCount) {
+  fun execute(
+      verbose: Boolean,
+      symbolic: Boolean,
+      output: Output = Output(),
+      maxSteps: Int = -1
+  ): Pair<ExecutionTree, Set<ExecutionTree>> {
+    val mem = initMemForScope(symbolic)
+    val pathConstraints = pre.evaluate(scope, mem, True)
+    if (pathConstraints.any { it is BooleanExpressionError })
+        throw Exception(
+            "Path constraint cannot be evaluated ${pathConstraints.first{it is BooleanExpressionError }}")
+    val pc =
+        pathConstraints
+            .map { it.result }
+            .reduce { acc, booleanExpression -> And(acc, booleanExpression) }
+    val initialCfg = Configuration(SequenceOfStatements(program), scope, mem, false, pc)
+    val root = ExecutionTree(mutableMapOf(), initialCfg)
+    var wl = mutableListOf(root)
+
+    while (wl.isNotEmpty()) {
+      val current = wl.first()
+      wl = wl.drop(1).toMutableList()
+      if (current.cfg.isFinal()) continue
+      val cfg = current.cfg
+      val stepCount = current.stepCount
+      if (maxSteps in 1 ..< stepCount + 1) {
         output.println("Terminated after ${maxSteps} steps.")
-        break
+        continue
       }
-      val step = cfg.statements.head().execute(cfg, input)
-      if (step.result.output != null) {
-        output.println(step.result.output)
+      if (cfg.error) {
+        output.println("Terminated abnormally.")
+        continue
       }
-      trace = trace + step
-      cfg = step.result.dst
-      if (verbose) println(cfg)
+      val steps = cfg.statements.head().execute(cfg, input, symbolic)
+      for (step in steps) {
+        if (step.result.output != null && !symbolic && !verbose) {
+          output.println(step.result.output)
+        }
+        val nextCfg = step.result.dst
+        val nextExecTree =
+            ExecutionTree(next = mutableMapOf(), nextCfg, stepCount + 1, step.result.output)
+        current.next.put(step, nextExecTree)
+        wl.addLast(nextExecTree)
+      }
     }
-    if (cfg.error) {
-      output.println("Terminated abnormally.")
-    }
+
     if (verbose) println("end.")
-    return trace
+    print("Size: ${root.flatten().size}")
+    if (symbolic) {
+      return Pair(root, root.unsafePaths(post))
+    } else {
+      return Pair(root, setOf())
+    }
   }
 
-  private fun initMemForScope(): Memory {
-    var mem = Memory(Array(scope.size) { BigInteger.ZERO })
+  private fun initMemForScope(symbolic: Boolean): Memory<ArithmeticExpression> {
+    var mem = Memory(Array(scope.size) { NumericLiteral(BigInteger.ZERO) as ArithmeticExpression })
     scope.symbols.values
         .filter { it.size > 1 }
-        .forEach { mem = mem.write(it.address, it.address.toBigInteger().plus(BigInteger.ONE)) }
+        .forEach {
+          mem =
+              mem.write(it.address, NumericLiteral(it.address.toBigInteger().plus(BigInteger.ONE)))
+        }
+    if (symbolic) {
+      for ((v, info) in scope.symbols) {
+        val base = info.address
+        for (offset in 0..info.size - 1) {
+          val symbolicValue = "$v$offset"
+          if (info.size == 1 || offset != 0) {
+            mem = mem.write(base + offset, ValAtAddr(Variable(symbolicValue)))
+          }
+        }
+      }
+    }
+        // scope.symbols.forEach {
+        //  println("${it.key} -> ${it.value.type} of size ${it.value.size} at ${it.value.address}")
+        // }
+        // println(mem)
     return mem
   }
 

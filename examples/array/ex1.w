@@ -1,8 +1,10 @@
 vars:
   int* x;
   int[3] y;
+  int z;
 pre: (true)
 code:
+  y[1] := y[0] + y[2];
   y[0] := 1;
   y[1] := 2;
   y[2] := 7;
