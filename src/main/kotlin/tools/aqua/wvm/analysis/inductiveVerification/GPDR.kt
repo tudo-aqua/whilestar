@@ -79,15 +79,25 @@ class GPDR(
                     return false
                 }
             }
-            // CONFLICT: If the model actually contains an interpolant, we refine our over-approximation:
-            // For 0 <= i < N, given a candidate model <M, i+1> and clause \phi, such that M \models \not\phi,
-                // if \mathcal{F}(R_i) \models \phi, then conjoin \phi to R_j for j <= i+1
-            // TODO
+            if (!candidateModels.isEmpty()) {
+                val (model, i) = candidateModels.first()
+                val phi = True  // Interpolant // TODO: Calculate with Z3
+                if (true) { // TODO: interpolant exists
+                    // CONFLICT: If the model actually contains an interpolant, we refine our over-approximation:
+                    // For 0 <= i < N, given a candidate model <M, i+1> and clause \phi, such that M \models \not\phi,
+                        // if \mathcal{F}(R_i) \models \phi, then conjoin \phi to R_j for j <= i+1
+                    approximations.forEachIndexed { j, it -> when (j) {
+                        in 1 .. i+1 -> approximations[j] = And(it, phi)
+                    } }
+                    candidateModels.removeFirst()
+                } else {  // Not interpolant exists
+                    // DECIDE: In case we do not find an interpolant with the conflict rule, we have to back-propagate the dangerous states:
+                    // If <M, i+1> for 0 <= i < N is a candidate model and there is a subset \hat{x}_0 of x_0 and constants c_0 such that
+                    // M, \hat{x}_0 = c_0 \models \mathcal{T}[R_i[x_0 / V]], then add the candidate model <\hat{x} = c_0, i> (renaming \hat{x}_0 to variables \hat{x} in V)
 
-            // DECIDE: In case we do not find an interpolant with the conflict rule, we have to back-propagate the dangerous states:
-            // If <M, i+1> for 0 <= i < N is a candidate model and there is a subset \hat{x}_0 of x_0 and constants c_0 such that
-            // ........
-            // TODO
+
+                }
+            }
 
         }
 
