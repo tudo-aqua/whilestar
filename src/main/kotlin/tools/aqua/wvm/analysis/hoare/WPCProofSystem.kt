@@ -45,11 +45,12 @@ class WPCProofSystem(val context: Context, val output: Output) {
       post: BooleanExpression
   ): Pair<BooleanExpression, List<Entailment>> =
       when (stmt) {
-          is While -> {
-            val wpcBody = wpc(stmt.body, prepare(stmt.invariant))
-            val assumption = And(pre,prepare(stmt.invariant))
-            val (_, vcsBody) = vcgen(And(assumption, prepare(stmt.head)), stmt.body, prepare(stmt.invariant))
-            Pair(
+        is While -> {
+          val wpcBody = wpc(stmt.body, prepare(stmt.invariant))
+          val assumption = And(pre, prepare(stmt.invariant))
+          val (_, vcsBody) =
+              vcgen(And(assumption, prepare(stmt.head)), stmt.body, prepare(stmt.invariant))
+          Pair(
               And(assumption, prepare(Not(stmt.head))),
               listOf(
                   Entailment(
@@ -72,7 +73,6 @@ class WPCProofSystem(val context: Context, val output: Output) {
                 listOf(Entailment(And(pre, prepare(stmt.cond)), post, "Following assertion")))
         else -> Pair(pre, emptyList())
       }
-
 
   private fun vcgen(
       pre: BooleanExpression,

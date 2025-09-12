@@ -77,7 +77,7 @@ data class Context(
     }
 
     if (verbose) println("end.")
-    print("Size: ${root.flatten().size}")
+    // print("Size: ${root.flatten().size}")
     if (symbolic) {
       return Pair(root, root.unsafePaths(post))
     } else {
@@ -104,10 +104,10 @@ data class Context(
         }
       }
     }
-        // scope.symbols.forEach {
-        //  println("${it.key} -> ${it.value.type} of size ${it.value.size} at ${it.value.address}")
-        // }
-        // println(mem)
+    // scope.symbols.forEach {
+    //  println("${it.key} -> ${it.value.type} of size ${it.value.size} at ${it.value.address}")
+    // }
+    // println(mem)
     return mem
   }
 
