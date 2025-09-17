@@ -634,20 +634,20 @@ data class Print(val message: String, val values: List<ArithmeticExpression>) : 
     val apps = mutableListOf<StatementApp>()
     if (valueCombinations.isEmpty()) {
       apps.addLast(
-        PrintOk(
-          listOf(),
-          this,
-          Transition(
-            cfg,
-            output = message,
-            dst =
-            Configuration(
-              SequenceOfStatements(cfg.statements.tail()),
-              cfg.scope,
-              cfg.memory,
-              false,
-              cfg.pathConstraint)),
-          cfg.pathConstraint))
+          PrintOk(
+              listOf(),
+              this,
+              Transition(
+                  cfg,
+                  output = message,
+                  dst =
+                      Configuration(
+                          SequenceOfStatements(cfg.statements.tail()),
+                          cfg.scope,
+                          cfg.memory,
+                          false,
+                          cfg.pathConstraint)),
+              cfg.pathConstraint))
     }
     for (comb in valueCombinations) {
       val combPC = comb.map { it.pc }.reduce { acc, exp -> And(acc, exp) }

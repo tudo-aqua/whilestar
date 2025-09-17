@@ -50,11 +50,9 @@ dependencies {
   implementation(libs.petitparser.core)
   implementation(libs.z3.turnkey)
   implementation(
-    fileTree(mapOf(
-      "dir" to "../konstraints/build/libs",
-      "include" to listOf("konstraints-*.jar")))
-  )
-  //implementation("tools.aqua:konstraints:0.1")
+      fileTree(
+          mapOf("dir" to "../konstraints/build/libs", "include" to listOf("konstraints-*.jar"))))
+  // implementation("tools.aqua:konstraints:0.1")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.launcher)
 }

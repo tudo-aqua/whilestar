@@ -104,10 +104,10 @@ data class Context(
         }
       }
     }
-        // scope.symbols.forEach {
-        //  println("${it.key} -> ${it.value.type} of size ${it.value.size} at ${it.value.address}")
-        // }
-        // println(mem)
+    // scope.symbols.forEach {
+    //  println("${it.key} -> ${it.value.type} of size ${it.value.size} at ${it.value.address}")
+    // }
+    // println(mem)
     return mem
   }
 
