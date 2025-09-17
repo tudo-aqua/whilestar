@@ -48,7 +48,8 @@ repositories { mavenCentral() }
 dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
-  implementation(libs.z3.turnkey)
+  implementation(
+      fileTree(mapOf("dir" to "../z3-turnkey/build/libs", "include" to listOf("z3-turnkey-*.jar"))))
   implementation(
       fileTree(
           mapOf("dir" to "../konstraints/build/libs", "include" to listOf("konstraints-*.jar"))))
