@@ -237,7 +237,6 @@ class SMTSolver {
   }
 
   fun simplify(expr: BooleanExpression): BooleanExpression {
-
     val term = asKonstraint(expr)
     val termSimplified = simplify(term)
 
@@ -248,5 +247,21 @@ class SMTSolver {
     val z3 = Z3Solver()
     val termSimplified = z3.simplify(vars.values.toList(), term)
     return termSimplified
+  }
+
+  /**
+   * Computes an interpolant for two boolean expressions exprA and exprB such that exprA implies the
+   * interpolant and the interpolant is unsatisfiable with exprB. A => I and I & B is unsat.
+   */
+  fun computeInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression {
+    val konstraintA = asKonstraint(exprA) // Also registers variables in vars
+    val konstraintB = asKonstraint(exprB)
+    val commands = vars.values + ComputeInterpolant(listOf(konstraintA, konstraintB))
+    val smtProgram = InterpolatingSMTProgram(commands, ctx)
+    smtProgram.solve()
+    val interpolants =
+        smtProgram.interpolant
+            ?: throw Exception("Could not compute interpolant for $exprA and $exprB")
+    return asExpression(interpolants.interpolants[0]) as BooleanExpression
   }
 }

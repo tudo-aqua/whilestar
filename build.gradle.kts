@@ -48,12 +48,12 @@ repositories { mavenCentral() }
 dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
-  implementation(
-      fileTree(mapOf("dir" to "../z3-turnkey/build/libs", "include" to listOf("z3-turnkey-*.jar"))))
+  implementation(libs.z3.turnkey)
   implementation(
       fileTree(
           mapOf("dir" to "../konstraints/build/libs", "include" to listOf("konstraints-*.jar"))))
   // implementation("tools.aqua:konstraints:0.1")
+  implementation("com.lordcodes.turtle:turtle:0.9.0")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.launcher)
 }
