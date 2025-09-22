@@ -25,11 +25,18 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
+import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
+import tools.aqua.wvm.analysis.inductiveVerification.GPDR
 import tools.aqua.wvm.analysis.inductiveVerification.KInductionChecker
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
+import tools.aqua.wvm.language.Gt
+import tools.aqua.wvm.language.Lte
+import tools.aqua.wvm.language.NumericLiteral
 import tools.aqua.wvm.language.SequenceOfStatements
+import tools.aqua.wvm.language.ValAtAddr
+import tools.aqua.wvm.language.Variable
 import tools.aqua.wvm.machine.Output
 import tools.aqua.wvm.parser.Parser
 
@@ -52,6 +59,8 @@ class While : CliktCommand() {
 
   private val kInd: Boolean by option("-k", "--kind", help = "run k-induction checker").flag()
 
+  private val gpdr: Boolean by option("-g", "--gpdr", help = "run gpdr checker").flag()
+
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
@@ -59,7 +68,7 @@ class While : CliktCommand() {
 
   override fun run() {
 
-    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd) {
+    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd && !gpdr) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -113,6 +122,14 @@ class While : CliktCommand() {
         val out = Output()
         val kIndChecker = KInductionChecker(context, out, verbose)
         kIndChecker.check(kBound = 10)
+        println("=============================================")
+      }
+
+      if (gpdr) {
+        println("=========== Running GPDR checker: ===========")
+        val out = Output()
+        val gpdrChecker = GPDR(context, out, verbose)
+        gpdrChecker.check()
         println("=============================================")
       }
 

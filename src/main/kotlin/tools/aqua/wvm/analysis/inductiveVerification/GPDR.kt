@@ -25,8 +25,10 @@ import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Eq
+import tools.aqua.wvm.language.False
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.NumericLiteral
+import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
 import tools.aqua.wvm.language.ValAtAddr
 import tools.aqua.wvm.language.Variable
@@ -58,12 +60,12 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?
-      if ((N > 0) and testEntailment(approximations[N], approximations[N - 1])) {
+      if ((N > 0) && testEntailment(approximations[N], approximations[N - 1])) {
         out.println("System is VALID.")
         return true
       }
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
-      if (candidateModels.first().second == 0) {
+      if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
         out.println("System is INVALID. Model: $candidateModels")
         return false
       }
@@ -71,19 +73,22 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // if R_N \models S, then N := N + 1 and R_N := True
       if (testEntailment(approximations[N], transitionSystem.invariant)) {
         out.println("System is ${N}-safe, increasing bound.")
-        approximations[N + 1] = True
+        approximations.add(True)
         N += 1
         continue
       }
       // INDUCTION: We may already have inductive properties in our R_i (just not strong enough for
       // our final goal)
       // (Useful to apply immediately following UNFOLD and CONFLICT)
-      val i = N - 1 // TODO: can be anything in 0 … N-1
-      val phi = approximations[i] // TODO: phi can be anything (?) How to choose?
-      if ((N > 0) and testEntailment(F(And(approximations[i], phi)), phi)) {
-        approximations.forEachIndexed { j, it ->
-          when (j) {
-            in 1..N -> approximations[j] = And(it, phi)
+      //TODO: Check this code:
+      if (false) {
+        val i = N - 1 // TODO: can be anything in 0 … N-1
+        val phi = approximations[i] // TODO: phi can be anything (?) How to choose?
+        if ((N > 0) and testEntailment(F(And(approximations[i], phi)), phi)) {
+          approximations.forEachIndexed { j, it ->
+            when (j) {
+              in 1..N -> approximations[j] = And(it, phi)
+            }
           }
         }
       }
@@ -91,9 +96,8 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // if M \models R_N \wedge \not S(x), then produce candidate <M, N>
       if (candidateModels.isEmpty()) {
         val test =
-            Entailment(
-                approximations[N], Not(transitionSystem.invariant), "Searching for candidate model")
-        val result = SMTSolver().solve(test.smtTest())
+            And(approximations[N], Not(transitionSystem.invariant)) // R_N \wedge \not S(x)
+        val result = SMTSolver().solve(test)
         if (result.status == SatStatus.SAT) {
           candidateModels.add(Pair(result.model.toFormula(), N))
         } else {
@@ -103,7 +107,11 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       }
       if (!candidateModels.isEmpty()) {
         val (model, i) = candidateModels.first()
-        val phi = True // Interpolant // TODO: Calculate with Z3
+        // val result =
+
+        // Interpolant // TODO: Calculate with Z3 // actually not_phi
+        val phi = SMTSolver().computeInterpolant(model, F(approximations[i-1]))
+
         if (true) { // TODO: interpolant exists
           // CONFLICT: If the model actually contains an interpolant, we refine our
           // over-approximation:
@@ -133,7 +141,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
     return this.map {
-          Eq(ValAtAddr(Variable(it.key)), NumericLiteral((it.value as Int).toBigInteger()), 0)
+          Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
         }
         .reduceOrDefault(True) { acc, next -> And(acc, next) }
   }
@@ -146,12 +154,10 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
   private fun F(
       R: BooleanExpression,
       vars: List<String> = transitionSystem.vars
-  ): BooleanExpression {
-    return predicateTransform(R, vars)
-  }
+  ): BooleanExpression = predicateTransform(R, vars)
 
-  private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression {
-    // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
-    return True // TODO: Initial or reachable in one step from R
-  }
+  private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression =
+      // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
+    Or (transitionSystem.initial,
+      And(False, False)) // TODO: complete
 }

@@ -165,10 +165,7 @@ class SMTSolver {
             Imply(
                 asExpression(expr.children[0]) as BooleanExpression,
                 asExpression(expr.children[1]) as BooleanExpression)
-        is Equals ->
-            Equiv(
-                asExpression(expr.children[0]) as BooleanExpression,
-                asExpression(expr.children[1]) as BooleanExpression)
+
         is tools.aqua.konstraints.theories.Not -> Not(asExpression(expr.inner) as BooleanExpression)
         is IntGreater ->
             Gt(
@@ -191,6 +188,10 @@ class SMTSolver {
                 asExpression(expr.children[0]) as ArithmeticExpression,
                 asExpression(expr.children[1]) as ArithmeticExpression,
                 0)
+        is Equals ->  // TODO: distinguish between equals and equivalence in the SMT output
+              Equiv(
+                  asExpression(expr.children[0]) as BooleanExpression,
+                  asExpression(expr.children[1]) as BooleanExpression)
         is ForallExpression ->
             Forall(Variable(expr.vars[0].name.value), asExpression(expr.term) as BooleanExpression)
         else -> throw Exception("oh no")
