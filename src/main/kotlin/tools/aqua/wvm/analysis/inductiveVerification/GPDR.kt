@@ -25,7 +25,6 @@ import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Eq
-import tools.aqua.wvm.language.False
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.NumericLiteral
 import tools.aqua.wvm.language.Or
@@ -37,7 +36,9 @@ import tools.aqua.wvm.machine.Output
 
 class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolean = false) {
   val transitionSystem = TransitionSystem(context, verbose)
-  val uniqueVariableIndex: Int = 0
+
+  val initial = And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()), 0))
+  var safety = transitionSystem.invariant // Safety property S
 
   // R_0, R_1, ... are a sequence of over-approximations of the reachable states (in i or fewer
   // steps)
@@ -51,12 +52,11 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
     // INITIALIZE
     val candidateModels: MutableList<Pair<BooleanExpression, Int>> = mutableListOf()
     val approximations: MutableList<BooleanExpression> =
-        mutableListOf(transitionSystem.initial) // initial == F(false)
+        mutableListOf(initial) // initial == F(false)
     var N = 0
 
     val bound = 10
-    val i = 0
-    while (i < bound) {
+    while (N < bound) {
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?
@@ -66,12 +66,12 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       }
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
       if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
-        out.println("System is INVALID. Model: $candidateModels")
+        out.println("System is INVALID. Model: ${candidateModels.first()}")
         return false
       }
       // UNFOLD: We look one step ahead as soon as we are sure that the system is safe for N steps:
       // if R_N \models S, then N := N + 1 and R_N := True
-      if (testEntailment(approximations[N], transitionSystem.invariant)) {
+      if (testEntailment(approximations[N], safety)) {
         out.println("System is ${N}-safe, increasing bound.")
         approximations.add(True)
         N += 1
@@ -81,13 +81,13 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // our final goal)
       // (Useful to apply immediately following UNFOLD and CONFLICT)
       //TODO: Check this code:
-      if (false) {
+      if (N > 0) {
         val i = N - 1 // TODO: can be anything in 0 … N-1
         val phi = approximations[i] // TODO: phi can be anything (?) How to choose?
-        if ((N > 0) and testEntailment(F(And(approximations[i], phi)), phi)) {
+        if ((N > 0) && testEntailment(F(And(approximations[i], phi)), phi)) {
           approximations.forEachIndexed { j, it ->
             when (j) {
-              in 1..N -> approximations[j] = And(it, phi)
+              in 1..N -> approximations[j] = if (it is True) phi else And(it, phi)
             }
           }
         }
@@ -96,7 +96,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // if M \models R_N \wedge \not S(x), then produce candidate <M, N>
       if (candidateModels.isEmpty()) {
         val test =
-            And(approximations[N], Not(transitionSystem.invariant)) // R_N \wedge \not S(x)
+            And(approximations[N], Not(safety)) // R_N \wedge \not S(x)
         val result = SMTSolver().solve(test)
         if (result.status == SatStatus.SAT) {
           candidateModels.add(Pair(result.model.toFormula(), N))
@@ -109,10 +109,11 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
         val (model, i) = candidateModels.first()
         // val result =
 
-        // Interpolant // TODO: Calculate with Z3 // actually not_phi
-        val phi = SMTSolver().computeInterpolant(model, F(approximations[i-1]))
+        // Interpolant // TODO: Calculate with Z3 // actually: not_phi
+        val step = F(approximations[i - 1])
+        val phi = SMTSolver().computeInterpolant(step, model)
 
-        if (true) { // TODO: interpolant exists
+        if (phi != null) { // interpolant exists
           // CONFLICT: If the model actually contains an interpolant, we refine our
           // over-approximation:
           // For 0 <= i < N, given a candidate model <M, i+1> and clause \phi, such that M \models
@@ -120,7 +121,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
           // if \mathcal{F}(R_i) \models \phi, then conjoin \phi to R_j for j <= i+1
           approximations.forEachIndexed { j, it ->
             when (j) {
-              in 1..i + 1 -> approximations[j] = And(it, phi)
+              in 1..i -> approximations[j] = if (it is True) phi else And(it, phi)
             }
           }
           candidateModels.removeFirst()
@@ -131,7 +132,15 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
           // and constants c_0 such that
           // M, \hat{x}_0 = c_0 \models \mathcal{T}[R_i[x_0 / V]], then add the candidate model
           // <\hat{x} = c_0, i> (renaming \hat{x}_0 to variables \hat{x} in V)
-
+          val test = And(model, step)
+          val result = SMTSolver().solve(test)
+          if (result.status == SatStatus.SAT) {
+            val relevantAssignments =
+                result.model.filter { (k, _) -> k.endsWith("0") }
+                    .mapKeys { (k, _) -> k.removeSuffix("0") }
+            // TODO: Does it suffice to use a subset of the assignments?
+            candidateModels.add(0, Pair(relevantAssignments.toFormula(), i - 1))
+          }
         }
       }
     }
@@ -140,7 +149,9 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
   }
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
-    return this.map {
+    val map = this.toMutableMap()
+    transitionSystem.vars.forEach { if (!this.containsKey(it)) map[it] = "0" } // Add missing variables as 0
+    return map.map {
           Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
         }
         .reduceOrDefault(True) { acc, next -> And(acc, next) }
@@ -156,8 +167,14 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       vars: List<String> = transitionSystem.vars
   ): BooleanExpression = predicateTransform(R, vars)
 
-  private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression =
-      // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
-    Or (transitionSystem.initial,
-      And(False, False)) // TODO: complete
+  private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression {
+    // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
+    return Or(
+      initial,
+      And(
+        R.renameVariables(vars.plus("loc").associateWith { "${it}0" }),
+        transitionSystem.transitions.renameVariables(
+          vars.plus("loc").associateWith { "${it}0" } +
+                  vars.plus("loc").map { "${it}'" }.associateWith { it.removeSuffix("'") })))
+  }
 }

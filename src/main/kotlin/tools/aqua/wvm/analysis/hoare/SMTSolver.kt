@@ -251,18 +251,50 @@ class SMTSolver {
   }
 
   /**
-   * Computes an interpolant for two boolean expressions exprA and exprB such that exprA implies the
+   * If possible, computes an interpolant for two boolean expressions exprA and exprB such that exprA implies the
    * interpolant and the interpolant is unsatisfiable with exprB. A => I and I & B is unsat.
    */
-  fun computeInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression {
+  fun computeInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression? {
+    val experimental = true
+    if (experimental) {  // Experimental: Does not work because of Integer theory limitations
+        // Usually exprB is the model looking like a == 5 & b == 6 & c == 7 ...
+        // Use subsets of the model to find a smaller interpolant
+        val modelParts = mutableListOf<BooleanExpression>()
+        var m = exprB
+        while (m is And) {
+            modelParts.add(m.right)
+            m = m.left
+        }
+        modelParts.add(m)
+        // Generate power set of modelParts, each as a single BooleanExpression connected with And
+        val powerSet = (1 until (1 shl modelParts.size)).map { mask ->
+            val subset = modelParts.filterIndexed { idx, _ -> (mask and (1 shl idx)) != 0 }
+            subset.reduce { acc, exp -> And(acc, exp) }
+        }
+        for (part in powerSet) {
+            val konstraint = asKonstraint(exprA) // Also registers variables in vars
+            val phi = asKonstraint(part)
+            // M \models \phi by construction
+            // Test a \models \not\phi
+            val commands = vars.values + Assert(konstraint) + Assert(phi) + CheckSat
+            val smtProgram = DefaultSMTProgram(commands, ctx)
+            smtProgram.solve()
+            if (smtProgram.status == SatStatus.UNSAT) {
+                return Not(asExpression(phi) as BooleanExpression)
+            }
+        }
+
+    }
+    // Standard way: Use the interpolation feature of the Konstraints library
     val konstraintA = asKonstraint(exprA) // Also registers variables in vars
     val konstraintB = asKonstraint(exprB)
     val commands = vars.values + ComputeInterpolant(listOf(konstraintA, konstraintB))
     val smtProgram = InterpolatingSMTProgram(commands, ctx)
     smtProgram.solve()
-    val interpolants =
-        smtProgram.interpolant
-            ?: throw Exception("Could not compute interpolant for $exprA and $exprB")
-    return asExpression(interpolants.interpolants[0]) as BooleanExpression
+    val interpolants = smtProgram.interpolant?.interpolants
+    return if (interpolants?.size == 1)
+      asExpression(interpolants[0]) as BooleanExpression
+    else
+      null
   }
 }
