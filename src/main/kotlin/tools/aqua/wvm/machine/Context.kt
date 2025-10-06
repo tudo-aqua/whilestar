@@ -33,6 +33,7 @@ data class Context(
   fun execute(
       verbose: Boolean,
       symbolic: Boolean,
+      booleanEvaluation: Boolean = false,
       output: Output = Output(),
       maxSteps: Int = -1
   ): Pair<ExecutionTree, Set<ExecutionTree>> {
@@ -45,7 +46,8 @@ data class Context(
         pathConstraints
             .map { it.result }
             .reduce { acc, booleanExpression -> And(acc, booleanExpression) }
-    val initialCfg = Configuration(SequenceOfStatements(program), scope, mem, false, pc)
+    val initialCfg =
+        Configuration(SequenceOfStatements(program), scope, mem, false, pc, booleanEvaluation)
     val root = ExecutionTree(mutableMapOf(), initialCfg)
     var wl = mutableListOf(root)
 

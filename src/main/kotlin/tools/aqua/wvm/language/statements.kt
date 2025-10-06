@@ -40,7 +40,7 @@ data class Assignment(val addr: AddressExpression, val expr: ArithmeticExpressio
   override fun execute(cfg: Configuration, input: Scanner?, symbolic: Boolean): List<StatementApp> {
     val apps = mutableListOf<StatementApp>()
     for (a in addr.evaluate(cfg.scope, cfg.memory, cfg.pathConstraint)) {
-      for (e in expr.evaluate(cfg.scope, cfg.memory, cfg.pathConstraint)) {
+      for (e in expr.evaluate(cfg.scope, cfg.memory, cfg.pathConstraint, cfg.booleanEvaluation)) {
         if (a is Error) {
           apps.addLast(
               NestedStatementError(
@@ -721,9 +721,12 @@ data class Havoc(
         continue
       }
       if (!symbolic) {
-        val number =
+        var number =
             input?.nextBigInteger()
                 ?: Random.nextLong(lower.toLong(), upper.toLong()).toBigInteger()
+        if (cfg.booleanEvaluation) {
+          number = number.coerceIn(BigInteger.ZERO, BigInteger.ONE)
+        }
         if (number < lower || number > upper)
             apps.addLast(
                 HavocRangeErr(
