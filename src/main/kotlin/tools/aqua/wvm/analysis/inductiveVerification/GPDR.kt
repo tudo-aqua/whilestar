@@ -31,13 +31,16 @@ import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
 import tools.aqua.wvm.language.ValAtAddr
 import tools.aqua.wvm.language.Variable
+import tools.aqua.wvm.language.renameVariables
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 
 class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolean = false) {
   val transitionSystem = TransitionSystem(context, verbose)
 
-  val initial = And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()), 0))
+  val initial =
+      transitionSystem.initial // And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")),
+  // NumericLiteral(0.toBigInteger()), 0))
   var safety = transitionSystem.invariant // Safety property S
 
   // R_0, R_1, ... are a sequence of over-approximations of the reachable states (in i or fewer
@@ -60,7 +63,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?
-      if ((N > 0) && testEntailment(approximations[N], approximations[N - 1])) {
+      if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
         out.println("System is VALID.")
         return true
       }
@@ -95,8 +98,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // CANDIDATE: Search for model that we can use as a basis for finding an interpolant:
       // if M \models R_N \wedge \not S(x), then produce candidate <M, N>
       if (candidateModels.isEmpty()) {
-        val test =
-            And(approximations[N], Not(safety)) // R_N \wedge \not S(x)
+        val test = And(approximations[N], Not(safety)) // R_N \wedge \not S(x)
         val result = SMTSolver().solve(test)
         if (result.status == SatStatus.SAT) {
           candidateModels.add(Pair(result.model.toFormula(), N))
@@ -136,7 +138,8 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
           val result = SMTSolver().solve(test)
           if (result.status == SatStatus.SAT) {
             val relevantAssignments =
-                result.model.filter { (k, _) -> k.endsWith("0") }
+                result.model
+                    .filter { (k, _) -> k.endsWith("0") }
                     .mapKeys { (k, _) -> k.removeSuffix("0") }
             // TODO: Does it suffice to use a subset of the assignments?
             candidateModels.add(0, Pair(relevantAssignments.toFormula(), i - 1))
@@ -144,16 +147,15 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
         }
       }
     }
-
     return false
   }
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
     val map = this.toMutableMap()
-    transitionSystem.vars.forEach { if (!this.containsKey(it)) map[it] = "0" } // Add missing variables as 0
-    return map.map {
-          Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
-        }
+    transitionSystem.vars.forEach {
+      if (!this.containsKey(it)) map[it] = "0"
+    } // Add missing variables as 0
+    return map.map { Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0) }
         .reduceOrDefault(True) { acc, next -> And(acc, next) }
   }
 
@@ -170,11 +172,11 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
   private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression {
     // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
     return Or(
-      initial,
-      And(
-        R.renameVariables(vars.plus("loc").associateWith { "${it}0" }),
-        transitionSystem.transitions.renameVariables(
-          vars.plus("loc").associateWith { "${it}0" } +
-                  vars.plus("loc").map { "${it}'" }.associateWith { it.removeSuffix("'") })))
+        initial,
+        And(
+            R.renameVariables(vars.plus("loc").associateWith { "${it}0" }),
+            transitionSystem.transitions.renameVariables(
+                vars.plus("loc").associateWith { "${it}0" } +
+                    vars.plus("loc").map { "${it}'" }.associateWith { it.removeSuffix("'") })))
   }
 }

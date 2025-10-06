@@ -75,7 +75,12 @@ class SMTSolver {
 
   fun asKonstraint(expr: ArithmeticExpression): Expression<IntSort> =
       when (expr) {
-        is NumericLiteral -> IntLiteral(expr.literal)
+        is NumericLiteral ->
+            if (expr.literal < 0.toBigInteger()) {
+              IntNeg(IntLiteral(-expr.literal))
+            } else {
+              IntLiteral(expr.literal)
+            }
         is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
@@ -154,18 +159,17 @@ class SMTSolver {
         is tools.aqua.konstraints.theories.True -> True
         is tools.aqua.konstraints.theories.False -> False
         is tools.aqua.konstraints.theories.And ->
-            And(
-                asExpression(expr.conjuncts[0]) as BooleanExpression,
-                asExpression(expr.conjuncts[1]) as BooleanExpression)
+            expr.conjuncts
+                .map { asExpression(it) as BooleanExpression }
+                .reduce { exp1, exp2 -> And(exp1, exp2) }
         is tools.aqua.konstraints.theories.Or ->
-            Or(
-                asExpression(expr.disjuncts[0]) as BooleanExpression,
-                asExpression(expr.disjuncts[1]) as BooleanExpression)
+            expr.disjuncts
+                .map { asExpression(it) as BooleanExpression }
+                .reduce { exp1, exp2 -> Or(exp1, exp2) }
         is Implies ->
             Imply(
                 asExpression(expr.children[0]) as BooleanExpression,
                 asExpression(expr.children[1]) as BooleanExpression)
-
         is tools.aqua.konstraints.theories.Not -> Not(asExpression(expr.inner) as BooleanExpression)
         is IntGreater ->
             Gt(
@@ -188,10 +192,10 @@ class SMTSolver {
                 asExpression(expr.children[0]) as ArithmeticExpression,
                 asExpression(expr.children[1]) as ArithmeticExpression,
                 0)
-        is Equals ->  // TODO: distinguish between equals and equivalence in the SMT output
-              Equiv(
-                  asExpression(expr.children[0]) as BooleanExpression,
-                  asExpression(expr.children[1]) as BooleanExpression)
+        is Equals -> // TODO: distinguish between equals and equivalence in the SMT output
+        Equiv(
+                asExpression(expr.children[0]) as BooleanExpression,
+                asExpression(expr.children[1]) as BooleanExpression)
         is ForallExpression ->
             Forall(Variable(expr.vars[0].name.value), asExpression(expr.term) as BooleanExpression)
         else -> throw Exception("oh no")
@@ -251,39 +255,40 @@ class SMTSolver {
   }
 
   /**
-   * If possible, computes an interpolant for two boolean expressions exprA and exprB such that exprA implies the
-   * interpolant and the interpolant is unsatisfiable with exprB. A => I and I & B is unsat.
+   * If possible, computes an interpolant for two boolean expressions exprA and exprB such that
+   * exprA implies the interpolant and the interpolant is unsatisfiable with exprB. A => I and I & B
+   * is unsat.
    */
   fun computeInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression? {
-    val experimental = true
-    if (experimental) {  // Experimental: Does not work because of Integer theory limitations
-        // Usually exprB is the model looking like a == 5 & b == 6 & c == 7 ...
-        // Use subsets of the model to find a smaller interpolant
-        val modelParts = mutableListOf<BooleanExpression>()
-        var m = exprB
-        while (m is And) {
-            modelParts.add(m.right)
-            m = m.left
-        }
-        modelParts.add(m)
-        // Generate power set of modelParts, each as a single BooleanExpression connected with And
-        val powerSet = (1 until (1 shl modelParts.size)).map { mask ->
+    val experimental = false
+    if (experimental) { // Experimental: Does not work because of Integer theory limitations
+      // Usually exprB is the model looking like a == 5 & b == 6 & c == 7 ...
+      // Use subsets of the model to find a smaller interpolant
+      val modelParts = mutableListOf<BooleanExpression>()
+      var m = exprB
+      while (m is And) {
+        modelParts.add(m.right)
+        m = m.left
+      }
+      modelParts.add(m)
+      // Generate power set of modelParts, each as a single BooleanExpression connected with And
+      val powerSet =
+          (1 until (1 shl modelParts.size)).map { mask ->
             val subset = modelParts.filterIndexed { idx, _ -> (mask and (1 shl idx)) != 0 }
             subset.reduce { acc, exp -> And(acc, exp) }
+          }
+      for (part in powerSet) {
+        val konstraint = asKonstraint(exprA) // Also registers variables in vars
+        val phi = asKonstraint(part)
+        // M \models \phi by construction
+        // Test a \models \not\phi
+        val commands = vars.values + Assert(konstraint) + Assert(phi) + CheckSat
+        val smtProgram = DefaultSMTProgram(commands, ctx)
+        smtProgram.solve()
+        if (smtProgram.status == SatStatus.UNSAT) {
+          return Not(asExpression(phi) as BooleanExpression)
         }
-        for (part in powerSet) {
-            val konstraint = asKonstraint(exprA) // Also registers variables in vars
-            val phi = asKonstraint(part)
-            // M \models \phi by construction
-            // Test a \models \not\phi
-            val commands = vars.values + Assert(konstraint) + Assert(phi) + CheckSat
-            val smtProgram = DefaultSMTProgram(commands, ctx)
-            smtProgram.solve()
-            if (smtProgram.status == SatStatus.UNSAT) {
-                return Not(asExpression(phi) as BooleanExpression)
-            }
-        }
-
+      }
     }
     // Standard way: Use the interpolation feature of the Konstraints library
     val konstraintA = asKonstraint(exprA) // Also registers variables in vars
@@ -292,9 +297,6 @@ class SMTSolver {
     val smtProgram = InterpolatingSMTProgram(commands, ctx)
     smtProgram.solve()
     val interpolants = smtProgram.interpolant?.interpolants
-    return if (interpolants?.size == 1)
-      asExpression(interpolants[0]) as BooleanExpression
-    else
-      null
+    return if (interpolants?.size == 1) asExpression(interpolants[0]) as BooleanExpression else null
   }
 }
