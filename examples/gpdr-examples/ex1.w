@@ -1,7 +1,7 @@
 vars:
   int a;
   int b;
-pre: (b = 0)
+pre: (b = 1)
 code:
   a := b;
-post: (a = 0)
+post: (a = 1)

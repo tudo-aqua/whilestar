@@ -32,7 +32,7 @@ import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
 
-class SMTSolver {
+class SMTSolver(val booleanEvaluation: Boolean = false) {
 
   val memArray = "M_"
 
@@ -218,7 +218,17 @@ class SMTSolver {
             }
             .reduceOrDefault(False) { exp1, exp2 -> Or(exp1, exp2) }
     val konstraint = tools.aqua.konstraints.theories.And(expr, asKonstraint(Not(oldModels)))
-    var commands = vars.values + Assert(konstraint) + CheckSat
+    val commands = (vars.values + Assert(konstraint)).toMutableList()
+    if (booleanEvaluation) {
+        // Add to konstraint that all variables but the memory and "loc" are boolean, i.e. equal to 0 or 1
+        val booleanVars = vars.keys.filter { it != "M_" && it != "loc" }.map {
+            Or(Eq(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger()), 0),
+                Eq(ValAtAddr(Variable(it)), NumericLiteral(1.toBigInteger()), 0))
+        }.reduceOrDefault(True) { acc, next -> And(acc, next) }
+        val booleanVarsKonstraint = asKonstraint(booleanVars)
+        commands += Assert(booleanVarsKonstraint)
+    }
+    commands += CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
     var model = emptyMap<String, String>()
     smtProgram.solve()
@@ -260,35 +270,8 @@ class SMTSolver {
    * is unsat.
    */
   fun computeInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression? {
-    val experimental = false
-    if (experimental) { // Experimental: Does not work because of Integer theory limitations
-      // Usually exprB is the model looking like a == 5 & b == 6 & c == 7 ...
-      // Use subsets of the model to find a smaller interpolant
-      val modelParts = mutableListOf<BooleanExpression>()
-      var m = exprB
-      while (m is And) {
-        modelParts.add(m.right)
-        m = m.left
-      }
-      modelParts.add(m)
-      // Generate power set of modelParts, each as a single BooleanExpression connected with And
-      val powerSet =
-          (1 until (1 shl modelParts.size)).map { mask ->
-            val subset = modelParts.filterIndexed { idx, _ -> (mask and (1 shl idx)) != 0 }
-            subset.reduce { acc, exp -> And(acc, exp) }
-          }
-      for (part in powerSet) {
-        val konstraint = asKonstraint(exprA) // Also registers variables in vars
-        val phi = asKonstraint(part)
-        // M \models \phi by construction
-        // Test a \models \not\phi
-        val commands = vars.values + Assert(konstraint) + Assert(phi) + CheckSat
-        val smtProgram = DefaultSMTProgram(commands, ctx)
-        smtProgram.solve()
-        if (smtProgram.status == SatStatus.UNSAT) {
-          return Not(asExpression(phi) as BooleanExpression)
-        }
-      }
+    if (booleanEvaluation) { // Boolean Variables: Does not work for every theory
+      return computeBooleanTheoryInterpolant(exprA, exprB)
     }
     // Standard way: Use the interpolation feature of the Konstraints library
     val konstraintA = asKonstraint(exprA) // Also registers variables in vars
@@ -299,4 +282,41 @@ class SMTSolver {
     val interpolants = smtProgram.interpolant?.interpolants
     return if (interpolants?.size == 1) asExpression(interpolants[0]) as BooleanExpression else null
   }
+
+    fun computeBooleanTheoryInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression? {
+        // Usually exprB is the model looking like a == 1 & b == 0 & c == 1 ...
+        // Use subsets of the model to find a smaller interpolant
+        val modelParts = mutableListOf<BooleanExpression>()
+        var m = exprB
+        while (m is And) {
+            modelParts.add(m.right)
+            m = m.left
+        }
+        modelParts.add(m)
+        // Generate power set of modelParts, each as a single BooleanExpression connected with And
+        val powerSet =
+            (1 until (1 shl modelParts.size)).map { mask ->
+                val subset = modelParts.filterIndexed { idx, _ -> (mask and (1 shl idx)) != 0 }
+                subset.reduce { acc, exp -> And(acc, exp) }
+            }
+        // Add to konstraint that all variables but the memory and "loc" are boolean, i.e. equal to 0 or 1
+        val booleanVars = vars.keys.filter { it != "M_" && it != "loc" }.map {
+            Or(Eq(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger()), 0),
+                Eq(ValAtAddr(Variable(it)), NumericLiteral(1.toBigInteger()), 0))
+        }.reduceOrDefault(True) { acc, next -> And(acc, next) }
+        val booleanVarsKonstraint = asKonstraint(booleanVars)
+        for (part in powerSet) {
+            val konstraint = asKonstraint(exprA) // Also registers variables in vars
+            val phi = asKonstraint(part)
+            // M \models \phi by construction
+            // Test a \models \not\phi
+            val commands = vars.values + Assert(konstraint) + Assert(booleanVarsKonstraint) + Assert(phi) + CheckSat
+            val smtProgram = DefaultSMTProgram(commands, ctx)
+            smtProgram.solve()
+            if (smtProgram.status == SatStatus.UNSAT) {
+                return Not(asExpression(phi) as BooleanExpression)
+            }
+        }
+        return null
+    }
 }

@@ -35,12 +35,13 @@ import tools.aqua.wvm.language.renameVariables
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 
-class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolean = false) {
+class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolean = false, val booleanEvaluation: Boolean = false) {
   val transitionSystem = TransitionSystem(context, verbose)
 
   val initial =
-      transitionSystem.initial // And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")),
-  // NumericLiteral(0.toBigInteger()), 0))
+      transitionSystem.initial
+      //And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()), 0))
+  // TODO: Test if initial is satisfiable at all
   var safety = transitionSystem.invariant // Safety property S
 
   // R_0, R_1, ... are a sequence of over-approximations of the reachable states (in i or fewer
@@ -83,8 +84,8 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // INDUCTION: We may already have inductive properties in our R_i (just not strong enough for
       // our final goal)
       // (Useful to apply immediately following UNFOLD and CONFLICT)
-      //TODO: Check this code:
-      if (N > 0) {
+      // TODO: Check this code:
+      if (N > 0 && false) {
         val i = N - 1 // TODO: can be anything in 0 … N-1
         val phi = approximations[i] // TODO: phi can be anything (?) How to choose?
         if ((N > 0) && testEntailment(F(And(approximations[i], phi)), phi)) {
@@ -99,7 +100,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
       // if M \models R_N \wedge \not S(x), then produce candidate <M, N>
       if (candidateModels.isEmpty()) {
         val test = And(approximations[N], Not(safety)) // R_N \wedge \not S(x)
-        val result = SMTSolver().solve(test)
+        val result = SMTSolver(booleanEvaluation = true).solve(test)
         if (result.status == SatStatus.SAT) {
           candidateModels.add(Pair(result.model.toFormula(), N))
         } else {
@@ -113,7 +114,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
 
         // Interpolant // TODO: Calculate with Z3 // actually: not_phi
         val step = F(approximations[i - 1])
-        val phi = SMTSolver().computeInterpolant(step, model)
+        val phi = SMTSolver(booleanEvaluation).computeInterpolant(step, model)
 
         if (phi != null) { // interpolant exists
           // CONFLICT: If the model actually contains an interpolant, we refine our
@@ -160,7 +161,7 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
   }
 
   private fun testEntailment(left: BooleanExpression, right: BooleanExpression): Boolean {
-    val result = SMTSolver().solve(Entailment(left, right, "Entailment test").smtTest())
+    val result = SMTSolver(booleanEvaluation).solve(Entailment(left, right, "Entailment test").smtTest())
     return result.status == SatStatus.UNSAT
   }
 

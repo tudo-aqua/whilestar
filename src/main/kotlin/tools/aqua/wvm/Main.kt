@@ -73,6 +73,7 @@ class While : CliktCommand() {
       if (externalInput) {
         context.input = Scanner(System.`in`)
       }
+      val booleanEvaluation = true
 
       if (verbose) {
         println("=============================================")
@@ -122,14 +123,14 @@ class While : CliktCommand() {
       if (gpdr) {
         println("=========== Running GPDR checker: ===========")
         val out = Output()
-        val gpdrChecker = GPDR(context, out, verbose)
+        val gpdrChecker = GPDR(context, out, verbose, booleanEvaluation)
         gpdrChecker.check()
         println("=============================================")
       }
 
       if (run) {
         println("============ Running program: ===============")
-        val trace = context.execute(verbose || symbolic, symbolic, booleanEvaluation = true)
+        val trace = context.execute(verbose || symbolic, symbolic, booleanEvaluation)
         if (verbose) {
           println("Execution Tree:")
           print(trace.first.toIndentString(""))
