@@ -51,7 +51,10 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
     // Invariant: Either not at the end or the postcondition holds
     // TODO: Maybe change this to have a property that is checked every step as well (with a flag)
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
-    invariant = Or(Not(atEnd), context.post)
+    // As a convention, error locations are labeled with negative numbers, more precisely in this
+    // implementation there is only one error location, labeled "-1"
+    val notError = Not(Lt(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger())))
+    invariant = And(notError, Or(Not(atEnd), context.post))
     if (verbose) println("Invariant: $invariant")
   }
 
@@ -173,15 +176,29 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
   }
 
   private fun Assertion.asTransition(locId: LocationID): BooleanExpression {
-    return And(
-        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+    val startId = locId.id
+    return Or(
         And(
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             And(
-                this.cond,
-                vars
-                    .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                    .reduceOrDefault(True) { acc, next -> And(acc, next) })))
+                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+                And(
+                    this.cond,
+                    vars
+                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                        .reduceOrDefault(True) { acc, next -> And(acc, next) }))),
+        And(
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
+            And(
+                Eq(
+                    ValAtAddr(Variable("loc'")),
+                    NumericLiteral((-1).toBigInteger()),
+                    0), // -1 indicates the error location
+                And(
+                    Not(this.cond),
+                    vars
+                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                        .reduceOrDefault(True) { acc, next -> And(acc, next) }))))
   }
 
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
@@ -210,7 +227,16 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
   }
 
   private fun Fail.asTransition(locId: LocationID): BooleanExpression {
-    return False // TODO: Is this correct? Should it be a transition at all?
+    return And(
+        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+        And(
+            Eq(
+                ValAtAddr(Variable("loc'")),
+                NumericLiteral((-1).toBigInteger()),
+                0), // -1 indicates the error location
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }))
   }
 
   // Utils
