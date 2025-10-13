@@ -35,12 +35,17 @@ import tools.aqua.wvm.language.renameVariables
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 
-class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolean = false, val booleanEvaluation: Boolean = false) {
+class GPDR(
+    val context: Context,
+    val out: Output = Output(),
+    val verbose: Boolean = false,
+    val booleanEvaluation: Boolean = false
+) {
   val transitionSystem = TransitionSystem(context, verbose)
 
-  val initial =
-      transitionSystem.initial
-      //And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()), 0))
+  val initial = transitionSystem.initial
+  // And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")),
+  // NumericLiteral(0.toBigInteger()), 0))
   // TODO: Test if initial is satisfiable at all
   var safety = transitionSystem.invariant // Safety property S
 
@@ -161,7 +166,8 @@ class GPDR(val context: Context, val out: Output = Output(), val verbose: Boolea
   }
 
   private fun testEntailment(left: BooleanExpression, right: BooleanExpression): Boolean {
-    val result = SMTSolver(booleanEvaluation).solve(Entailment(left, right, "Entailment test").smtTest())
+    val result =
+        SMTSolver(booleanEvaluation).solve(Entailment(left, right, "Entailment test").smtTest())
     return result.status == SatStatus.UNSAT
   }
 
