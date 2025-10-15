@@ -22,7 +22,11 @@ import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 
-class TransitionSystem(val context: Context, val verbose: Boolean = false) {
+class TransitionSystem(
+    val context: Context,
+    val verbose: Boolean = false,
+    val useWhileInvariant: Boolean = true
+) {
   // Possible system states s\in S_{V,\mu}
   val vars: List<String> = context.scope.symbols.map { it.key } // V //Also: loc
   var initial: BooleanExpression = True // all vars are zero // I
@@ -48,7 +52,7 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
     transitions = context.program.asTransition(locId)
     if (verbose) println("Transition relation: $transitions")
 
-    // Invariant: Either not at the end or the postcondition holds
+    // Invariant: (Not at error location) and (Either not at the end or the postcondition holds)
     // TODO: Maybe change this to have a property that is checked every step as well (with a flag)
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
     // As a convention, error locations are labeled with negative numbers, more precisely in this
@@ -59,7 +63,7 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
   }
 
   private fun List<Statement>.asTransition(locId: LocationID): BooleanExpression {
-    return this.map { it.asTransition(locId) }.reduceOrDefault(True) { acc, next -> Or(acc, next) }
+    return this.map { it.asTransition(locId) }.reduceOrDefault(False) { acc, next -> Or(acc, next) }
   }
 
   private fun SequenceOfStatements.asTransition(locId: LocationID): BooleanExpression {
@@ -82,164 +86,133 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
   private fun IfThenElse.asTransition(locId: LocationID): BooleanExpression {
     val startId = locId.id
     val ifTrueTransition =
-        And(
+        makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-            And(
-                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-                And(
-                    this.cond,
-                    vars
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) })))
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            this.cond,
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
     var thenBody = this.thenBlock.asTransition(locId)
     val lastIdThenBody = locId.id
     val ifFalseTransition =
-        And(
+        makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
-            And(
-                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-                And(
-                    Not(this.cond),
-                    vars
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) })))
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            Not(this.cond),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
     val elseBody = this.elseBlock.asTransition(locId)
-    // Changing last location id from the when-branch (currently in locId) to the last location
-    // id from the else-branch
+    // Changing last location id from the when-branch (currently in locId) to the last location-id
+    // from the else-branch
     thenBody = thenBody.changeLocation(lastIdThenBody, locId.id)
-    return Or(Or(ifTrueTransition, thenBody), Or(ifFalseTransition, elseBody))
+    return combineMultipleTransitions(ifTrueTransition, thenBody, ifFalseTransition, elseBody)
   }
 
   private fun While.asTransition(locId: LocationID): BooleanExpression {
     val startId = locId.id
     val whileTrueTransition =
-        And(
+        makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-            And(
-                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-                And(
-                    this.head,
-                    vars
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) })))
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            this.head, // boolean condition
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) },
+            if (useWhileInvariant) this.invariant else True)
     val loopBody = this.body.asTransition(locId).changeLocation(locId.id, startId)
     val whileFalseTransition =
-        And(
+        makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral(startId.toBigInteger()), 0),
-            And(
-                Eq(ValAtAddr(Variable("loc'")), NumericLiteral(locId.id.toBigInteger()), 0),
-                And(
-                    Not(this.head),
-                    vars
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) })))
-    return Or(whileTrueTransition, Or(loopBody, whileFalseTransition))
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral(locId.id.toBigInteger()), 0),
+            Not(this.head),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) },
+            if (useWhileInvariant) this.invariant else True)
+    return combineMultipleTransitions(whileTrueTransition, loopBody, whileFalseTransition)
   }
 
   private fun Assignment.asTransition(locId: LocationID): BooleanExpression {
-    return And(
+    return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        And(
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            if (vars.size > 1) {
-              And(
-                  Eq(this.expr, ValAtAddr(Variable("${this.addr}'")), 0),
-                  vars
-                      .filter { it != this.addr.toString() }
-                      .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                      .reduceOrDefault(True) { acc, next -> And(acc, next) })
-            } else {
-              Eq(this.expr, ValAtAddr(Variable("${this.addr}'")), 0)
-            }))
+        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+        Eq(this.expr, ValAtAddr(Variable("${this.addr}'")), 0),
+        vars
+            .filter { it != this.addr.toString() }
+            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Swap.asTransition(locId: LocationID): BooleanExpression {
-    return And(
+    return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        And(
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            And(
-                Eq(ValAtAddr(Variable("${this.left}'")), ValAtAddr(Variable("${this.right}")), 0),
-                if (vars.size > 2) {
-                  And(
-                      Eq(
-                          ValAtAddr(Variable("${this.right}'")),
-                          ValAtAddr(Variable("${this.left}")),
-                          0),
-                      vars
-                          .filter { it != this.left.toString() && it != this.right.toString() }
-                          .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                          .reduceOrDefault(True) { acc, next -> And(acc, next) })
-                } else {
-                  Eq(ValAtAddr(Variable("${this.right}'")), ValAtAddr(Variable("${this.left}")), 0)
-                })))
+        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+        Eq(ValAtAddr(Variable("${this.left}'")), ValAtAddr(Variable("${this.right}")), 0),
+        Eq(ValAtAddr(Variable("${this.right}'")), ValAtAddr(Variable("${this.left}")), 0),
+        vars
+            .filter { it != this.left.toString() && it != this.right.toString() }
+            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Assertion.asTransition(locId: LocationID): BooleanExpression {
     val startId = locId.id
-    return Or(
-        And(
+    return combineMultipleTransitions(
+        makeSingleTransition( // Assertion holds
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-            And(
-                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-                And(
-                    this.cond,
-                    vars
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) }))),
-        And(
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            this.cond,
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }),
+        makeSingleTransition( // Assertion violated, -1 indicates the error location
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
-            And(
-                Eq(
-                    ValAtAddr(Variable("loc'")),
-                    NumericLiteral((-1).toBigInteger()),
-                    0), // -1 indicates the error location
-                And(
-                    Not(this.cond),
-                    vars
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) }))))
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
+            Not(this.cond),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }))
   }
 
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
-    return And(
+    return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        And(
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            vars
-                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                .reduceOrDefault(True) { acc, next -> And(acc, next) }))
+        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+        vars
+            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {
-    return And(
+    return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        And(
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            And(
-                Lte(NumericLiteral(this.lower), ValAtAddr(Variable("${this.addr}'"))),
-                And(
-                    Lt(ValAtAddr(Variable("${this.addr}'")), NumericLiteral(this.upper)),
-                    vars
-                        .filter { it != this.addr.toString() }
-                        .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) }))))
+        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+        Lte(NumericLiteral(this.lower), ValAtAddr(Variable("${this.addr}'"))),
+        Lt(ValAtAddr(Variable("${this.addr}'")), NumericLiteral(this.upper)),
+        vars
+            .filter { it != this.addr.toString() }
+            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Fail.asTransition(locId: LocationID): BooleanExpression {
-    return And(
+    return makeSingleTransition( // -1 indicates the error location
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        And(
-            Eq(
-                ValAtAddr(Variable("loc'")),
-                NumericLiteral((-1).toBigInteger()),
-                0), // -1 indicates the error location
-            vars
-                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                .reduceOrDefault(True) { acc, next -> And(acc, next) }))
+        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
+        vars
+            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   // Utils
+
+  private fun makeSingleTransition(vararg elements: BooleanExpression) =
+      listOf(*elements).filter { it !is True }.reduceOrDefault(True) { acc, next -> And(acc, next) }
+
+  private fun combineMultipleTransitions(vararg elements: BooleanExpression) =
+      listOf(*elements).filter { it !is True }.reduceOrDefault(False) { acc, next -> Or(acc, next) }
 
   private fun BooleanExpression.changeLocation(currentId: Int, newId: Int): BooleanExpression {
     return when (this) {
@@ -259,6 +232,8 @@ class TransitionSystem(val context: Context, val verbose: Boolean = false) {
       else -> this // Other expressions are not handled here TODO: Are more necessary?
     }
   }
+
+  // Temporal transition system expressions
 
   fun numberedTransitions(from: Int, to: Int): BooleanExpression {
     return transitions.renameVariables(
