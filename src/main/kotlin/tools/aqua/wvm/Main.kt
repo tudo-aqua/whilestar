@@ -108,7 +108,7 @@ class While : CliktCommand() {
         println("=========== Running BMC checker: ===========")
         val out = Output()
         val bmcChecker = BMCSafetyChecker(context, out, verbose)
-        bmcChecker.check(maxBound = 10)
+        val result = bmcChecker.check()
         println("=============================================")
       }
 
