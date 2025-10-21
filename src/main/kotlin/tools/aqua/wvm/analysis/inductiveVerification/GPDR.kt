@@ -20,6 +20,8 @@ package tools.aqua.wvm.analysis.inductiveVerification
 
 import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.konstraints.util.reduceOrDefault
+import tools.aqua.wvm.analysis.VerificationApproach
+import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.hoare.Entailment
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
@@ -36,11 +38,13 @@ import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 
 class GPDR(
-    val context: Context,
-    val out: Output = Output(),
-    val verbose: Boolean = false,
-    val booleanEvaluation: Boolean = false
-) {
+    override val context: Context,
+    override val out: Output = Output(),
+    override val verbose: Boolean = false,
+    val booleanEvaluation: Boolean = false,
+    val bound: Int = 10
+) : VerificationApproach {
+    override val name: String = "GPDR"
   val transitionSystem = TransitionSystem(context, verbose)
 
   val initial = transitionSystem.initial
@@ -57,7 +61,7 @@ class GPDR(
   // R_{i+1} over-approximates R_i and predicateTransform(R_i): {R_i} \subseteq {R_{i+1}},
   // {predicateTransform(R_i)} \subseteq {R_{i+1}}
 
-  fun check(): Boolean {
+  override fun check(): VerificationResult {
     // INITIALIZE
     val candidateModels: MutableList<Pair<BooleanExpression, Int>> = mutableListOf()
     val approximations: MutableList<BooleanExpression> =
@@ -66,19 +70,18 @@ class GPDR(
     out.println("INITIALIZE: ε || [N = 0, R_0 = I]")
     // TODO: Make sure the initial is actually reachable/satisfiable
 
-    val bound = 10
     while (N < bound) {
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?
       if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
         out.println("System is VALID.")
-        return true
+        return VerificationResult.Proof("System is VALID.")
       }
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
       if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
         out.println("System is INVALID. Model: ${candidateModels.first()}")
-        return false
+        return VerificationResult.Counterexample("System is INVALID.", candidateModels.first().first.toString())
       }
       // UNFOLD: We look one step ahead as soon as we are sure that the system is safe for N steps:
       // if R_N \models S, then N := N + 1 and R_N := True
@@ -113,7 +116,7 @@ class GPDR(
           out.println("CANDIDATE: Model <${result.model.toFormula()}, $N>")
         } else {
           out.println("No candidate model found. Is the system VALID? Check this further!!") // TODO
-          return false
+          return VerificationResult.Crash("This should not happen. No candidate model found.")
         }
       }
       if (!candidateModels.isEmpty()) {
@@ -158,7 +161,7 @@ class GPDR(
         }
       }
     }
-    return false
+    return VerificationResult.NoResult("Reached bound of $bound without finding proof or counterexample.")
   }
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
