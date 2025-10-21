@@ -116,7 +116,7 @@ class While : CliktCommand() {
         println("======== Running k-induction checker: =======")
         val out = Output()
         val kIndChecker = KInductionChecker(context, out, verbose)
-        kIndChecker.check(kBound = 10)
+        kIndChecker.check()
         println("=============================================")
       }
 
