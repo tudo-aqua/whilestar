@@ -63,6 +63,8 @@ class GPDR(
     val approximations: MutableList<BooleanExpression> =
         mutableListOf(initial) // initial == F(false)
     var N = 0
+    out.println("INITIALIZE: ε || [N = 0, R_0 = I]")
+    // TODO: Make sure the initial is actually reachable/satisfiable
 
     val bound = 10
     while (N < bound) {
@@ -81,7 +83,7 @@ class GPDR(
       // UNFOLD: We look one step ahead as soon as we are sure that the system is safe for N steps:
       // if R_N \models S, then N := N + 1 and R_N := True
       if (testEntailment(approximations[N], safety)) {
-        out.println("System is ${N}-safe, increasing bound.")
+        out.println("UNFOLD: System is ${N}-safe, increasing bound.")
         approximations.add(True)
         N += 1
         continue
@@ -105,9 +107,10 @@ class GPDR(
       // if M \models R_N \wedge \not S(x), then produce candidate <M, N>
       if (candidateModels.isEmpty()) {
         val test = And(approximations[N], Not(safety)) // R_N \wedge \not S(x)
-        val result = SMTSolver(booleanEvaluation = true).solve(test)
+        val result = SMTSolver(booleanEvaluation).solve(test)
         if (result.status == SatStatus.SAT) {
           candidateModels.add(Pair(result.model.toFormula(), N))
+          out.println("CANDIDATE: Model <${result.model.toFormula()}, $N>")
         } else {
           out.println("No candidate model found. Is the system VALID? Check this further!!") // TODO
           return false
@@ -127,6 +130,7 @@ class GPDR(
           // For 0 <= i < N, given a candidate model <M, i+1> and clause \phi, such that M \models
           // \not\phi,
           // if \mathcal{F}(R_i) \models \phi, then conjoin \phi to R_j for j <= i+1
+          out.println("CONFLICT: Found interpolant at level $i: $phi")
           approximations.forEachIndexed { j, it ->
             when (j) {
               in 1..i -> approximations[j] = if (it is True) phi else And(it, phi)
@@ -149,6 +153,7 @@ class GPDR(
                     .mapKeys { (k, _) -> k.removeSuffix("0") }
             // TODO: Does it suffice to use a subset of the assignments?
             candidateModels.add(0, Pair(relevantAssignments.toFormula(), i - 1))
+            out.println("DECIDE: Back-propagating to level ${i - 1}: $relevantAssignments")
           }
         }
       }
