@@ -231,7 +231,12 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
                     Eq(ValAtAddr(Variable(it)), NumericLiteral(1.toBigInteger()), 0))
               }
               .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val booleanVarsKonstraint = asKonstraint(booleanVars)
+      val locConstraint =
+          vars.keys
+              .filter { it == "loc" } // Only if loc is present
+              .map { Gte(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger())) }
+              .reduceOrDefault(True) { acc, next -> And(acc, next) }
+      val booleanVarsKonstraint = asKonstraint(And(booleanVars, locConstraint))
       commands += Assert(booleanVarsKonstraint)
     }
     commands += CheckSat
