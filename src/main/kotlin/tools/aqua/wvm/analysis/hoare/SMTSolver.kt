@@ -48,6 +48,20 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
     vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
   }
 
+  companion object {
+    var numberOfSolveCalls = 0
+    var numberOfSimplifyCalls = 0
+    var NumberOfInterpolantCalls = 0
+    val numberOfSMTCalls
+      get() = numberOfSolveCalls + numberOfSimplifyCalls + NumberOfInterpolantCalls
+
+    fun resetCallCounters() {
+      numberOfSolveCalls = 0
+      numberOfSimplifyCalls = 0
+      NumberOfInterpolantCalls = 0
+    }
+  }
+
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
@@ -242,12 +256,12 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
     commands += CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
     var model = emptyMap<String, String>()
-    smtProgram.solve()
+    smtProgram.solve().also { numberOfSolveCalls++ }
     if (smtProgram.status == SatStatus.SAT) {
       try {
         commands += GetModel
         val progForModel = DefaultSMTProgram(commands, ctx)
-        progForModel.solve()
+        progForModel.solve().also { numberOfSolveCalls++ }
         model =
             progForModel.model?.definitions?.associate { it ->
               (it.name.toString() to it.term.toString())
@@ -271,7 +285,7 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
 
   fun simplify(term: Expression<BoolSort>): Expression<BoolSort> {
     val z3 = Z3Solver()
-    val termSimplified = z3.simplify(vars.values.toList(), term)
+    val termSimplified = z3.simplify(vars.values.toList(), term).also { numberOfSolveCalls++ }
     return termSimplified
   }
 
@@ -289,7 +303,7 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
     val konstraintB = asKonstraint(exprB)
     val commands = vars.values + ComputeInterpolant(listOf(konstraintA, konstraintB))
     val smtProgram = InterpolatingSMTProgram(commands, ctx)
-    smtProgram.solve()
+    smtProgram.solve().also { numberOfSolveCalls++ }
     val interpolants = smtProgram.interpolant?.interpolants
     return if (interpolants?.size == 1) asExpression(interpolants[0]) as BooleanExpression else null
   }
@@ -333,7 +347,7 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
       val commands =
           vars.values + Assert(konstraint) + Assert(booleanVarsKonstraint) + Assert(phi) + CheckSat
       val smtProgram = DefaultSMTProgram(commands, ctx)
-      smtProgram.solve()
+      smtProgram.solve().also { numberOfSolveCalls++ }
       if (smtProgram.status == SatStatus.UNSAT) {
         return Not(asExpression(phi) as BooleanExpression)
       }

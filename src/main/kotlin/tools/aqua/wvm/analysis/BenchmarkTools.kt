@@ -22,6 +22,7 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.system.measureTimeMillis
+import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
 import tools.aqua.wvm.analysis.inductiveVerification.GPDR
@@ -58,26 +59,26 @@ data class BenchmarkResult(
     val approachName: String,
     val timeMillis: Long,
     val memoryBytes: Long,
-    val classification: String
+    val classification: String,
+    val numberOfSMTCalls: Int
 ) {
   val allAttributes: List<Any>
-    get() = listOf(exampleName, approachName, timeMillis, memoryBytes, classification)
+    get() =
+        listOf(exampleName, approachName, timeMillis, memoryBytes, classification, numberOfSMTCalls)
 
   companion object {
     val attributeNames: List<String>
-      get() = listOf("Example", "Approach", "Time(ms)", "Memory(bytes)", "Classification")
+      get() =
+          listOf("Example", "Approach", "Time(ms)", "Memory(bytes)", "Classification", "#SMTCalls")
   }
 }
 
 class BenchmarkTools {
   /*
   Many TODOs:
-  - TODO: Sampling: warmupRuns, Measured runs
-  - TODO: Timeout handling withTimeout(...) {...}
-  - TODO: Data class AggregatedResults to hold everything
-  - TODO: Memory usage
-  - TODO: Number of SMT calls
-  - TODO: True / False  positives/negatives classification
+  - TODO: Sampling: warmupRuns, Measured runs, hold aggregated results in data class
+  - TODO: Timeout handling
+  - TODO: Memory usage => This is not great, consider using a profiler, ask supervisor
    */
   val out = Output()
 
@@ -99,6 +100,7 @@ class BenchmarkTools {
         val memAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
         Runtime.getRuntime().gc()
         val memUsed = memAfter - memBefore
+        val numberOfSMTCalls = SMTSolver.numberOfSMTCalls.also { SMTSolver.resetCallCounters() }
         out.println(
             "--- Example: ${example.name}, Approach: ${approach?.name}, Result: ${result.message}")
         val benchmarkResult =
@@ -107,7 +109,8 @@ class BenchmarkTools {
                 approachName = approach?.name ?: "Unknown",
                 timeMillis = time,
                 memoryBytes = memUsed,
-                classification = confusionClassification(result, example.expectedResult))
+                classification = confusionClassification(result, example.expectedResult),
+                numberOfSMTCalls = numberOfSMTCalls)
         allResults.add(benchmarkResult)
         out.println("Benchmark result: ${benchmarkResult.toString()}")
       }
