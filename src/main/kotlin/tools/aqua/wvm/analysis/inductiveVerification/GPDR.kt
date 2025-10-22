@@ -42,9 +42,9 @@ class GPDR(
     override val out: Output = Output(),
     override val verbose: Boolean = false,
     val booleanEvaluation: Boolean = false,
-    val bound: Int = 10
+    val bound: Int = 100
 ) : VerificationApproach {
-  override val name: String = "GPDR"
+  override val name: String = "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""}"
   val transitionSystem = TransitionSystem(context, verbose)
 
   val initial = transitionSystem.initial
@@ -67,10 +67,12 @@ class GPDR(
     val approximations: MutableList<BooleanExpression> =
         mutableListOf(initial) // initial == F(false)
     var N = 0
+    var iteration = 0
     out.println("INITIALIZE: ε || [N = 0, R_0 = I]")
     // TODO: Make sure the initial is actually reachable/satisfiable
 
-    while (N < bound) {
+    while (iteration < bound) {
+      iteration += 1
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?

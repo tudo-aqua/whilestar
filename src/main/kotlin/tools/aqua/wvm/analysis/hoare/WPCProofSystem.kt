@@ -29,7 +29,7 @@ import tools.aqua.wvm.machine.Scope
 
 class WPCProofSystem(
     override val context: Context,
-    override val out: Output,
+    override val out: Output = Output(),
     override val verbose: Boolean = false,
 ) : VerificationApproach {
   override val name: String = "WPC Proof System"

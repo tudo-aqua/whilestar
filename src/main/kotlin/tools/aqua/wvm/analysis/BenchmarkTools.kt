@@ -18,17 +18,56 @@
 
 package tools.aqua.wvm.analysis
 
+import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import kotlin.system.measureTimeMillis
+import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
+import tools.aqua.wvm.analysis.inductiveVerification.GPDR
+import tools.aqua.wvm.analysis.inductiveVerification.KInductionChecker
+import tools.aqua.wvm.analysis.inductiveVerification.KInductionCheckerWithBMC
 import tools.aqua.wvm.machine.Context
+import tools.aqua.wvm.machine.Output
 
-val approaches = listOf<(Context) -> VerificationApproach> { ctx -> BMCSafetyChecker(ctx) }
+val approaches =
+    listOf<(Context) -> VerificationApproach>(
+        { ctx -> BMCSafetyChecker(ctx, maxBound = 10) },
+        { ctx -> KInductionChecker(ctx, kBound = 10) },
+        { ctx -> KInductionCheckerWithBMC(ctx, kBound = 10) },
+        { ctx -> WPCProofSystem(ctx) },
+        { ctx -> GPDR(ctx, bound = 10) },
+        { ctx -> GPDR(ctx, booleanEvaluation = true, bound = 10) })
+
 val examples =
-    listOf<VerificationExample>(
-        VerificationExample(
-            "GPDR Example 2", "examples/gpdr-examples/ex2.w", VerificationResult.Counterexample()),
-        // VerificationExample("While Example 1", "examples/while/ex1.w",
-        // VerificationResult.Counterexample())
-    )
+    File("examples/examples-list.txt").readLines().map { line ->
+      val parts = line.split(" ")
+      val path = "examples/" + parts[0].trim()
+      val name = parts[1].trim()
+      val expected =
+          when (parts[2].trim().lowercase()) {
+            "true" -> VerificationResult.Proof("Expected Proof")
+            "false" -> VerificationResult.Counterexample("Expected Counterexample")
+            else -> VerificationResult.NoResult("No Expected Result")
+          }
+      VerificationExample(name, path, expected)
+    }
+
+data class BenchmarkResult(
+    val exampleName: String,
+    val approachName: String,
+    val timeMillis: Long,
+    val memoryBytes: Long,
+    val classification: String
+) {
+  val allAttributes: List<Any>
+    get() = listOf(exampleName, approachName, timeMillis, memoryBytes, classification)
+
+  companion object {
+    val attributeNames: List<String>
+      get() = listOf("Example", "Approach", "Time(ms)", "Memory(bytes)", "Classification")
+  }
+}
 
 class BenchmarkTools {
   /*
@@ -40,17 +79,64 @@ class BenchmarkTools {
   - TODO: Number of SMT calls
   - TODO: True / False  positives/negatives classification
    */
+  val out = Output()
+
   fun runAll() {
+    val allResults: MutableList<BenchmarkResult> = mutableListOf()
     for (example in examples) {
-      for (approach in approaches) {
-        val approach = approach(example.context)
-        println("total ${ Runtime.getRuntime().totalMemory()}")
-        var mem = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
-        println(mem)
-        val result = approach.check()
-        mem = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory() - mem
-        println(mem)
-        println("Example: ${example.name}, Approach: ${approach.name}, Result: ${result.message}")
+      for (a in approaches) {
+        out.println(
+            "--- Running example: ${example.name} with approach: ${a(example.context).name}")
+        // Measure here: time, memory, ...
+        Runtime.getRuntime().gc()
+        val memBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+        var result: VerificationResult
+        var approach: VerificationApproach? = null
+        val time = measureTimeMillis {
+          approach = a(example.context) // Create approach instance
+          result = approach.check() // Run verification
+        }
+        val memAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+        Runtime.getRuntime().gc()
+        val memUsed = memAfter - memBefore
+        out.println(
+            "--- Example: ${example.name}, Approach: ${approach?.name}, Result: ${result.message}")
+        val benchmarkResult =
+            BenchmarkResult(
+                exampleName = example.name,
+                approachName = approach?.name ?: "Unknown",
+                timeMillis = time,
+                memoryBytes = memUsed,
+                classification = confusionClassification(result, example.expectedResult))
+        allResults.add(benchmarkResult)
+        out.println("Benchmark result: ${benchmarkResult.toString()}")
+      }
+    }
+    saveToCSV(allResults)
+  }
+
+  fun confusionClassification(predicted: VerificationResult, expected: VerificationResult): String {
+    return when {
+      predicted is VerificationResult.Proof && expected is VerificationResult.Proof ->
+          "True Positive"
+      predicted is VerificationResult.Counterexample &&
+          expected is VerificationResult.Counterexample -> "True Negative"
+      predicted is VerificationResult.Proof && expected is VerificationResult.Counterexample ->
+          "False Positive"
+      predicted is VerificationResult.Counterexample && expected is VerificationResult.Proof ->
+          "False Negative"
+      else -> "No Result"
+    }
+  }
+
+  fun saveToCSV(results: List<BenchmarkResult>) {
+    val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+    val file = File("out/benchmark_results_$timestamp.csv")
+
+    file.printWriter().use { out ->
+      out.println(BenchmarkResult.attributeNames.joinToString(",")) // Header
+      for (result in results) {
+        out.println(result.allAttributes.joinToString(","))
       }
     }
   }
