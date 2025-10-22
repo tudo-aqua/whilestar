@@ -20,13 +20,19 @@ package tools.aqua.wvm.analysis.hoare
 
 import java.math.BigInteger
 import tools.aqua.konstraints.smt.SatStatus
+import tools.aqua.wvm.analysis.VerificationApproach
+import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 import tools.aqua.wvm.machine.Scope
 
-class WPCProofSystem(val context: Context, val output: Output) {
-
+class WPCProofSystem(
+    override val context: Context,
+    override val out: Output,
+    override val verbose: Boolean = false,
+) : VerificationApproach {
+  override val name: String = "WPC Proof System"
   private var uniqueId = 0
 
   private fun vcgen(
@@ -329,21 +335,25 @@ class WPCProofSystem(val context: Context, val output: Output) {
     return newPre
   }
 
-  fun proof(): Boolean {
+  fun proof(): Boolean { // For backwards compatibility
+    return check() is VerificationResult.Proof
+  }
+
+  override fun check(): VerificationResult {
     val pre = augment(context.pre, context.scope)
     val (_, vcs) = vcgen(pre, context.program, prepare(context.post))
-    output.println("==== generating verification conditions: ====")
+    out.println("==== generating verification conditions: ====")
     var success = true
-    vcs.forEach { output.println("$it") }
+    vcs.forEach { out.println("$it") }
     for (vc in vcs) {
-      output.println("---------------------------------------------")
-      output.println("${vc.explanation}:")
+      out.println("---------------------------------------------")
+      out.println("${vc.explanation}:")
       val expr = vc.smtTest()
-      output.println("SMT Test: $expr")
+      out.println("SMT Test: $expr")
       val solver = SMTSolver()
       val result = solver.solve(vc.smtTest())
       success = success and (result.status == SatStatus.UNSAT)
-      output.println(
+      out.println(
           when (result.status) {
             SatStatus.UNSAT -> "successful."
             SatStatus.SAT -> "counterexample: ${result.model}"
@@ -355,8 +365,13 @@ class WPCProofSystem(val context: Context, val output: Output) {
         success = false
       }
     }
-    output.println("=============================================")
-    output.println("The proof was ${if (success) "" else "not "}successful.")
-    return success
+    out.println("=============================================")
+    out.println("The proof was ${if (success) "" else "not "}successful.")
+    return when (success) {
+      true -> VerificationResult.Proof("All verification conditions were successfully proven.")
+      false ->
+          VerificationResult.Counterexample(
+              "At least one verification condition could not be proven.")
+    }
   }
 }

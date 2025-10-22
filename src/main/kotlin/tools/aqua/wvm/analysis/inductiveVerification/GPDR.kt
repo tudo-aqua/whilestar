@@ -44,7 +44,7 @@ class GPDR(
     val booleanEvaluation: Boolean = false,
     val bound: Int = 10
 ) : VerificationApproach {
-    override val name: String = "GPDR"
+  override val name: String = "GPDR"
   val transitionSystem = TransitionSystem(context, verbose)
 
   val initial = transitionSystem.initial
@@ -81,7 +81,8 @@ class GPDR(
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
       if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
         out.println("System is INVALID. Model: ${candidateModels.first()}")
-        return VerificationResult.Counterexample("System is INVALID.", candidateModels.first().first.toString())
+        return VerificationResult.Counterexample(
+            "System is INVALID.", candidateModels.first().first.toString())
       }
       // UNFOLD: We look one step ahead as soon as we are sure that the system is safe for N steps:
       // if R_N \models S, then N := N + 1 and R_N := True
@@ -161,7 +162,8 @@ class GPDR(
         }
       }
     }
-    return VerificationResult.NoResult("Reached bound of $bound without finding proof or counterexample.")
+    return VerificationResult.NoResult(
+        "Reached bound of $bound without finding proof or counterexample.")
   }
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
