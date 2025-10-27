@@ -32,7 +32,7 @@ import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
 
-class SMTSolver(val booleanEvaluation: Boolean = false) {
+class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = true) {
 
   val memArray = "M_"
 
@@ -65,6 +65,13 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+        is NamedArray if !this.wpcMode-> {
+            if (!vars.containsKey(expr.name)) {
+              vars +=
+                  (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
+            }
+            UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+        }
         is ArrayRead ->
             ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index))
                 as Expression<IntSort>
@@ -84,6 +91,15 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
       return UserDeclaredExpression(Symbol(expr.name), IntSort)
     } else if (expr is ArrayRead) {
       return asKonstraint(expr) as Expression<IntSort>
+    } else if (!this.wpcMode && expr is ArrayWrite) {
+      return asKonstraint(expr) as Expression<IntSort>
+    } else if (!this.wpcMode && expr is NamedArray) {
+      if (!vars.containsKey(expr.name)) {
+        vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
+      }
+      return UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort)) as Expression<IntSort>
+    } else if (!this.wpcMode) {
+        throw Exception("SMT Solver cannot compute with address expression ${expr}")
     } else throw Exception("WPC Proof System cannot compute with address expression ${expr}")
   }
 
@@ -270,7 +286,7 @@ class SMTSolver(val booleanEvaluation: Boolean = false) {
         // println(model)
       } catch (ex: Exception) {
         // todo: produce some output
-        println("oops.")
+        println("oops.: $ex")
       }
     }
     return Result(smtProgram.status, model)

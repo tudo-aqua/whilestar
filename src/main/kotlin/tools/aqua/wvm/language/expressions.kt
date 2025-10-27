@@ -959,6 +959,32 @@ object AnyArray : ArrayExpression {
   override fun toString(): String = "M"
 }
 
+object AnyArrayPrimed : ArrayExpression {
+    override fun evaluate(
+        scope: Scope,
+        memory: Memory<ArithmeticExpression>,
+        pathConstraint: BooleanExpression,
+        booleanEvaluation: Boolean
+    ): List<Application<Int>> {
+        throw Exception("array is not meant to be evaluated.")
+    }
+
+    override fun toString(): String = "M'"
+}
+
+data class NamedArray(val name: String) : ArrayExpression {
+    override fun evaluate(
+        scope: Scope,
+        memory: Memory<ArithmeticExpression>,
+        pathConstraint: BooleanExpression,
+        booleanEvaluation: Boolean
+    ): List<Application<Int>> {
+        throw Exception("array is not meant to be evaluated.")
+    }
+
+    override fun toString(): String = "$name"
+}
+
 data class ArrayRead(val array: ArrayExpression, val index: ArithmeticExpression) :
     ArrayExpression {
   override fun evaluate(
@@ -1038,7 +1064,11 @@ fun BooleanExpression.renameVariables(renames: Map<String, String>): BooleanExpr
 
 fun ArrayExpression.renameVariables(renames: Map<String, String>): ArrayExpression {
   return when (this) {
+    is AnyArray if renames.containsKey("M") -> NamedArray(renames["M"]!!)
     is AnyArray -> this
+    is AnyArrayPrimed if renames.containsKey("M'") -> NamedArray(renames["M'"]!!)
+    is AnyArrayPrimed -> this
+    is NamedArray -> this
     is ArrayRead -> ArrayRead(array.renameVariables(renames), index.renameVariables(renames))
     is ArrayWrite ->
         ArrayWrite(
