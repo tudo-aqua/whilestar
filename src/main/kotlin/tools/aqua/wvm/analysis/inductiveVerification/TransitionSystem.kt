@@ -28,7 +28,7 @@ class TransitionSystem(
     val useWhileInvariant: Boolean = true
 ) {
   // Possible system states s\in S_{V,\mu}
-  val vars: List<String> = context.scope.symbols.map { it.key } // V //Also: loc
+  val vars: List<String> = context.scope.symbols.map { it.key } // V //Also: loc and memory M
 
   var initial: BooleanExpression = True // all vars are zero // I
   var transitions: BooleanExpression = True // transition relation //\Gamma
@@ -40,75 +40,10 @@ class TransitionSystem(
 
   init {
     if (verbose) println("Variables: $vars")
-    // Initial condition: All variables are zero and the location is 0 and precondition holds
-    var memIndex = 0
-    val memInit =
-        context.scope.symbols
-            .map {
-              when {
-                it.value.type == BasicType.INT ->
-                    listOf( // integer variable initialized to 0
-                            Eq(
-                                ValAtAddr(Variable(it.key)),
-                                NumericLiteral(memIndex.toBigInteger()),
-                                0),
-                            Eq(
-                                ValAtAddr(
-                                    ArrayRead(
-                                        AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
-                                NumericLiteral(0.toBigInteger()),
-                                0))
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) }
-                it.value.type is Pointer && it.value.size == 1 ->
-                    listOf( // pointer to integer initialized to 0
-                            Eq(
-                                ValAtAddr(Variable(it.key)),
-                                NumericLiteral(memIndex.toBigInteger()),
-                                0),
-                            Eq(
-                                ValAtAddr(
-                                    ArrayRead(
-                                        AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
-                                NumericLiteral(0.toBigInteger()),
-                                0))
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) }
-                it.value.size > 1 ->
-                    listOf( // array initialized to 0
-                            Eq(
-                                ValAtAddr(Variable(it.key)),
-                                NumericLiteral(memIndex.toBigInteger()),
-                                0),
-                            Eq(
-                                ValAtAddr(
-                                    ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
-                                NumericLiteral(((memIndex++) + 1).toBigInteger()),
-                                0),
-                            (0 until it.value.size - 1)
-                                .map {
-                                  Eq(
-                                      ValAtAddr(
-                                          ArrayRead(
-                                              AnyArray,
-                                              NumericLiteral((memIndex++).toBigInteger()))),
-                                      NumericLiteral(0.toBigInteger()),
-                                      0)
-                                }
-                                .reduceOrDefault(True) { acc, next -> And(acc, next) })
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) }
-                else ->
-                    throw Exception(
-                        "Unsupported variable type in transition system initial condition.")
-              }
-            }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) }
-
-    val newPre = And(prepare(context.pre), memInit)
+    val memInit = initMemory() // Memory initialized, vars point to index, values are zero
+    val preOnMemory = prepareOnMemory(context.pre)
     val initialLoc = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
-    // for (entry in vars) {
-    //   val varIsZero = Eq(ValAtAddr(Variable(entry)), NumericLiteral(0.toBigInteger()), 0)
-    //   initial = And(initial, varIsZero)
-    // }
-    initial = And(initialLoc, newPre)
+    initial = And(memInit, And(initialLoc, preOnMemory))
     if (verbose) println("Initial condition: $initial")
 
     // Transition relation
@@ -120,51 +55,92 @@ class TransitionSystem(
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
     // As a convention, error locations are labeled with negative numbers, more precisely in this
     // implementation there is only one error location, labeled "-1"
-    val notError = Not(Lt(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger())))
-    invariant = And(notError, Or(Not(atEnd), prepare(context.post)))
+    val notError = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
+    invariant = And(notError, Or(Not(atEnd), prepareOnMemory(context.post)))
     if (verbose) println("Invariant: $invariant")
   }
 
-  private fun prepare(phi: AddressExpression): AddressExpression =
+  private fun initMemory(): BooleanExpression {
+    var memIndex = 0
+    return context.scope.symbols
+        .map {
+          when {
+            it.value.type == BasicType.INT ->
+                listOf( // integer variable initialized to 0
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
+                    Eq(
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
+                        NumericLiteral(0.toBigInteger()),
+                        0))
+            it.value.type is Pointer && it.value.size == 1 ->
+                listOf( // pointer to integer initialized to 0
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
+                    Eq(
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
+                        NumericLiteral(0.toBigInteger()),
+                        0))
+            it.value.size > 1 ->
+                listOf( // array initialized to 0
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
+                    Eq(
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
+                        NumericLiteral(((memIndex++) + 1).toBigInteger()),
+                        0),
+                    (0 until it.value.size - 1)
+                        .map {
+                          Eq(
+                              ValAtAddr(
+                                  ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
+                              NumericLiteral(0.toBigInteger()),
+                              0)
+                        }
+                        .reduceOrDefault(True) { acc, next -> And(acc, next) })
+            else ->
+                throw Exception("Unsupported variable type in transition system initial condition.")
+          }
+        }
+        .flatten()
+        .reduceOrDefault(True) { acc, next -> And(acc, next) }
+  }
+
+  private fun prepareOnMemory(phi: AddressExpression): AddressExpression =
       when (phi) {
         is Variable -> ArrayRead(AnyArray, ValAtAddr(phi))
-        is DeRef -> ArrayRead(AnyArray, ValAtAddr(prepare(phi.reference)))
-        is ArrayAccess -> ArrayRead(AnyArray, Add(prepare(phi.array), prepare(phi.index)))
+        is DeRef -> ArrayRead(AnyArray, ValAtAddr(prepareOnMemory(phi.reference)))
+        is ArrayAccess ->
+            ArrayRead(AnyArray, Add(prepareOnMemory(phi.array), prepareOnMemory(phi.index)))
         else -> throw Exception("this case should not occur. $phi")
-      // is ArrayWrite -> ValAtAddr(ArrayWrite(phi.array, replace(phi.index, v, replacement),
-      // replace(phi.value, v, replacement)))
-      // is AnyArray -> throw Exception("this case should not occur.")
       }
 
-  private fun prepare(expr: ArithmeticExpression): ArithmeticExpression =
+  private fun prepareOnMemory(expr: ArithmeticExpression): ArithmeticExpression =
       when (expr) {
-        is ValAtAddr -> ValAtAddr(prepare(expr.addr))
+        is ValAtAddr -> ValAtAddr(prepareOnMemory(expr.addr))
         is NumericLiteral -> NumericLiteral(expr.literal)
-        is UnaryMinus -> UnaryMinus(prepare(expr.negated))
-        is Add -> Add(prepare(expr.left), prepare(expr.right))
-        is Sub -> Sub(prepare(expr.left), prepare(expr.right))
-        is Mul -> Mul(prepare(expr.left), prepare(expr.right))
-        is Div -> Div(prepare(expr.left), prepare(expr.right))
-        is Rem -> Rem(prepare(expr.left), prepare(expr.right))
+        is UnaryMinus -> UnaryMinus(prepareOnMemory(expr.negated))
+        is Add -> Add(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Sub -> Sub(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Mul -> Mul(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Div -> Div(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Rem -> Rem(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
         is VarAddress -> throw Exception("expression ($expr) not supported by proof system.")
       }
 
-  private fun prepare(expr: BooleanExpression): BooleanExpression =
+  private fun prepareOnMemory(expr: BooleanExpression): BooleanExpression =
       when (expr) {
         is True -> expr
         is False -> expr
-        is Not -> Not(prepare(expr.negated))
-        is Eq -> Eq(prepare(expr.left), prepare(expr.right), expr.nesting)
-        is Gt -> Gt(prepare(expr.left), prepare(expr.right))
-        is Gte -> Gte(prepare(expr.left), prepare(expr.right))
-        is Lt -> Lt(prepare(expr.left), prepare(expr.right))
-        is Lte -> Lte(prepare(expr.left), prepare(expr.right))
-        is And -> And(prepare(expr.left), prepare(expr.right))
-        is Equiv -> Equiv(prepare(expr.left), prepare(expr.right))
-        is Imply -> Imply(prepare(expr.left), prepare(expr.right))
-        is Or -> Or(prepare(expr.left), prepare(expr.right))
+        is Not -> Not(prepareOnMemory(expr.negated))
+        is Eq -> Eq(prepareOnMemory(expr.left), prepareOnMemory(expr.right), expr.nesting)
+        is Gt -> Gt(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Gte -> Gte(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Lt -> Lt(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Lte -> Lte(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is And -> And(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Equiv -> Equiv(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Imply -> Imply(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
+        is Or -> Or(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
         // since bound vars are never program vars, we only need to replace on expression
-        is Forall -> Forall(expr.boundVar, prepare(expr.expression))
+        is Forall -> Forall(expr.boundVar, prepareOnMemory(expr.expression))
       }
 
   private fun List<Statement>.asTransition(locId: LocationID): BooleanExpression {
@@ -194,7 +170,7 @@ class TransitionSystem(
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            prepare(this.cond),
+            prepareOnMemory(this.cond),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) })
@@ -204,7 +180,7 @@ class TransitionSystem(
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            Not(prepare(this.cond)),
+            Not(prepareOnMemory(this.cond)),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) })
@@ -221,7 +197,7 @@ class TransitionSystem(
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            prepare(this.head), // boolean condition
+            prepareOnMemory(this.head), // boolean condition
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
@@ -231,7 +207,7 @@ class TransitionSystem(
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral(startId.toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral(locId.id.toBigInteger()), 0),
-            Not(prepare(this.head)),
+            Not(prepareOnMemory(this.head)),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
@@ -247,7 +223,7 @@ class TransitionSystem(
           is Variable ->
               Eq(
                   ValAtAddr(AnyArrayPrimed),
-                  ValAtAddr(ArrayWrite(AnyArray, ValAtAddr(this.addr), prepare(this.expr))),
+                  ValAtAddr(ArrayWrite(AnyArray, ValAtAddr(this.addr), prepareOnMemory(this.expr))),
                   0)
           is DeRef ->
               Eq(
@@ -256,7 +232,7 @@ class TransitionSystem(
                       ArrayWrite(
                           AnyArray,
                           ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference))),
-                          prepare(this.expr))),
+                          prepareOnMemory(this.expr))),
                   0,
               )
           is ArrayAccess ->
@@ -267,8 +243,8 @@ class TransitionSystem(
                           AnyArray,
                           Add(
                               ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
-                              prepare(this.addr.index)),
-                          prepare(this.expr))),
+                              prepareOnMemory(this.addr.index)),
+                          prepareOnMemory(this.expr))),
                   0,
               )
           else ->
@@ -276,12 +252,13 @@ class TransitionSystem(
                   "Assignment to non-variable addresses is not supported in the transition system.")
         },
         vars
-            .filter { it != this.addr.toString() }
+            // .filter { it != this.addr.toString() }
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Swap.asTransition(locId: LocationID): BooleanExpression {
+    TODO()
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
@@ -299,14 +276,14 @@ class TransitionSystem(
         makeSingleTransition( // Assertion holds
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            prepare(this.cond),
+            prepareOnMemory(this.cond),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) }),
         makeSingleTransition( // Assertion violated, -1 indicates the error location
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
-            Not(this.cond),
+            Not(prepareOnMemory(this.cond)),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) }))
@@ -316,12 +293,14 @@ class TransitionSystem(
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+        Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
         vars
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {
+    TODO()
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
@@ -354,7 +333,8 @@ class TransitionSystem(
     return when (this) {
       is Eq -> {
         if (this.left is ValAtAddr &&
-            ((this.left.addr as Variable).name == "loc" || this.left.addr.name == "loc'") &&
+            this.left.addr is Variable &&
+            (this.left.addr.name == "loc" || this.left.addr.name == "loc'") &&
             this.right is NumericLiteral &&
             this.right.literal == currentId.toBigInteger()) {
           Eq(ValAtAddr(Variable(this.left.addr.name)), NumericLiteral(newId.toBigInteger()), 0)
