@@ -169,6 +169,7 @@ class GPDR(
   }
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
+    TODO("THIS DOES NOT WORK WITH ARRAYS YET. NEEDS TO BE FIXED.")
     val map = this.toMutableMap()
     transitionSystem.vars.forEach {
       if (!this.containsKey(it)) map[it] = "0"

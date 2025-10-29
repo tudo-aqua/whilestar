@@ -32,7 +32,15 @@ import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
 
-class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = true) {
+/**
+ * SMT Solver wrapper using the Konstraints library.
+ *
+ * @param booleanEvaluation If true, all variables (except memory and "loc") are considered boolean,
+ *   i.e. equal to 0 or 1.
+ * @param wpcMode If true, the solver is used in the WPC proof system mode, which restricts certain
+ *   operations. NOT SURE IF THIS IS NECESSARY ANYMORE (LEGACY).
+ */
+class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = false) {
 
   val memArray = "M_"
 
@@ -65,16 +73,15 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = t
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
-        is NamedArray if !this.wpcMode-> {
-            if (!vars.containsKey(expr.name)) {
-              vars +=
-                  (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
-            }
-            UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
-        }
+        is NamedArray ->
+            if (!this.wpcMode) {
+              if (!vars.containsKey(expr.name)) {
+                vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
+              }
+              UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+            } else throw Exception("oh no")
         is ArrayRead ->
             ArraySelect(asKonstraint(expr.array) as Expression<ArraySort>, asKonstraint(expr.index))
-                as Expression<IntSort>
         is ArrayWrite ->
             ArrayStore(
                 asKonstraint(expr.array) as Expression<ArraySort>,
@@ -97,9 +104,10 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = t
       if (!vars.containsKey(expr.name)) {
         vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
       }
-      return UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort)) as Expression<IntSort>
+      return UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+          as Expression<IntSort>
     } else if (!this.wpcMode) {
-        throw Exception("SMT Solver cannot compute with address expression ${expr}")
+      throw Exception("SMT Solver cannot compute with address expression ${expr}")
     } else throw Exception("WPC Proof System cannot compute with address expression ${expr}")
   }
 
