@@ -56,7 +56,7 @@ class While : CliktCommand() {
 
     try {
       val source = File(filename).readText()
-      val context = Parser.parse(source)
+      val context = Parser().parse(source)
       if (externalInput) {
         context.input = Scanner(System.`in`)
       }

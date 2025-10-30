@@ -27,7 +27,7 @@ class TypeCheckerTest {
 
   fun run(filename: String, shouldFail: Boolean = false) {
     val source = File(filename).readText()
-    val context = Parser.parse(source)
+    val context = Parser().parse(source)
 
     println("==== generating type correctness proof: =====")
     val checker = TypeChecker(context.scope)

@@ -25,7 +25,7 @@ class ParserTest {
   @Test
   fun testParser() {
     val ctx =
-        Parser.parse(
+        Parser(restricted = true).parse(
             """
 vars:
   int x;

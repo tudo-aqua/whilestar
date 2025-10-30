@@ -35,8 +35,7 @@ operator fun Parser.times(other: Parser): SequenceParser = seq(other)
 
 infix fun Parser.trim(both: Parser): Parser = trim(both)
 
-object Parser {
-  private val arraySizeLimit = 255
+class Parser(restricted: Boolean = false) {
 
   private val whitespaceCat = anyOf(" \t\r\n", "space, tab, or newline expected")
   private val digitCat = range('0', '9')
@@ -126,19 +125,29 @@ object Parser {
 
   private val arithExpr = undefined()
   private val booleanExpr = undefined()
-
   private val deref = undefined()
+  private val addressExpr = undefined()
 
   init {
-    deref.set(
-        identifier.map { result: String -> Variable(result) } +
-            (star * deref).map { results: List<Any> -> DeRef(results[1] as AddressExpression) })
+      if (!restricted) {
+          deref.set(
+              identifier.map { result: String -> Variable(result) } +
+                      (star * deref).map { results: List<Any> -> DeRef(results[1] as AddressExpression) })
+      } else {
+          deref.set(identifier.map { result: String -> Variable(result) })
+      }
   }
 
-  private val addressExpr =
-      (deref * lsbr * arithExpr * rsbr).map { results: List<Any> ->
-        ArrayAccess(ValAtAddr(results[0] as AddressExpression), results[2] as ArithmeticExpression)
-      } + deref.map { deref: AddressExpression -> deref }
+  init {
+    if (!restricted) {
+        addressExpr.set(
+            (deref * lsbr * arithExpr * rsbr).map { results: List<Any> ->
+                ArrayAccess(ValAtAddr(results[0] as AddressExpression), results[2] as ArithmeticExpression)
+            } + deref.map { deref: AddressExpression -> deref })
+    } else {
+        addressExpr.set(deref.map { deref: AddressExpression -> deref })
+    }
+  }
 
   private val arithAtom =
       (lparen * arithExpr * rparen).map { results: List<Any> -> results[1] } +
@@ -277,20 +286,17 @@ object Parser {
 
   private val typeSize =
       (lsbr * numeral * rsbr).map { results: List<Any> ->
-	val arraySize = (results[1] as String).toInt()
-	if (arraySize <= arraySizeLimit) {   
-            Pair(
-		arraySize + 1, /* +1 for the pointer to the data */
-		Pointer(BasicType.INT))
-	} else {
-	    throw Exception("Type size is limited to ${arraySizeLimit + 1}, $arraySize + 1 requested")
-	}
-	} + star.star().map { results: List<Any> -> Pair(1, buildType(results.size)) }
+        Pair(
+            (results[1] as String).toInt() + 1, /* +1 for the pointer to the data */
+            Pointer(BasicType.INT))
+      } + star.star().map { results: List<Any> -> Pair(1, buildType(results.size)) }
 
-  private val decl =
+  private val decl = if (!restricted)
       (intKW * typeSize * identifier * semicolon).map { results: List<Any> ->
-        Pair(results[2], results[1])
-      }
+        Pair(results[2], results[1])}
+    else
+        (intKW * identifier * semicolon).map { results: List<Any> ->
+            Pair(results[1], Pair(1, BasicType.INT)) }
 
   private fun buildScope(entries: List<Pair<String, Pair<Int, Type>>>): Scope {
     val info = HashMap<String, Scope.ElementInfo>()
