@@ -219,53 +219,59 @@ class TransitionSystem(
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        when (this.addr) {
-          is Variable ->
-              Eq(
-                  ValAtAddr(AnyArrayPrimed),
-                  ValAtAddr(ArrayWrite(AnyArray, ValAtAddr(this.addr), prepareOnMemory(this.expr))),
-                  0)
-          is DeRef ->
-              Eq(
-                  ValAtAddr(AnyArrayPrimed),
-                  ValAtAddr(
-                      ArrayWrite(
-                          AnyArray,
-                          ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference))),
-                          prepareOnMemory(this.expr))),
-                  0,
-              )
-          is ArrayAccess ->
-              Eq(
-                  ValAtAddr(AnyArrayPrimed),
-                  ValAtAddr(
-                      ArrayWrite(
-                          AnyArray,
+        Eq(
+            ValAtAddr(AnyArrayPrimed), // Memory after assignment
+            ValAtAddr(
+                ArrayWrite(
+                    AnyArray,
+                    when (this.addr) { // Addressing depending on type
+                      is Variable -> ValAtAddr(this.addr)
+                      is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference)))
+                      is ArrayAccess ->
                           Add(
                               ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
-                              prepareOnMemory(this.addr.index)),
-                          prepareOnMemory(this.expr))),
-                  0,
-              )
-          else ->
-              throw Exception(
-                  "Assignment to non-variable addresses is not supported in the transition system.")
-        },
+                              prepareOnMemory(this.addr.index))
+                      else -> throw Exception("Unsupported address in Assignment.")
+                    },
+                    prepareOnMemory(this.expr))),
+            0),
         vars
-            // .filter { it != this.addr.toString() }
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
   private fun Swap.asTransition(locId: LocationID): BooleanExpression {
-    TODO()
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        Eq(ValAtAddr(Variable("${this.left}'")), ValAtAddr(Variable("${this.right}")), 0),
-        Eq(ValAtAddr(Variable("${this.right}'")), ValAtAddr(Variable("${this.left}")), 0),
+        Eq(
+            ValAtAddr(AnyArrayPrimed), // Memory after swap
+            ValAtAddr(
+                ArrayWrite(
+                    ArrayWrite(
+                        AnyArray,
+                        when (this.left) { // Addressing of left depending on type
+                          is Variable -> ValAtAddr(this.left)
+                          is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.left.reference)))
+                          is ArrayAccess ->
+                              Add(
+                                  ValAtAddr(ArrayRead(AnyArray, this.left.array)),
+                                  prepareOnMemory(this.left.index))
+                          else -> throw Exception("Unsupported left address in Swap.")
+                        },
+                        prepareOnMemory(ValAtAddr(this.right))),
+                    when (this.right) { // Addressing of right depending on type
+                      is Variable -> ValAtAddr(this.right)
+                      is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.right.reference)))
+                      is ArrayAccess ->
+                          Add(
+                              ValAtAddr(ArrayRead(AnyArray, this.right.array)),
+                              prepareOnMemory(this.right.index))
+                      else -> throw Exception("Unsupported right address in Swap.")
+                    },
+                    prepareOnMemory(ValAtAddr(this.left)))),
+            0),
         vars
-            .filter { it != this.left.toString() && it != this.right.toString() }
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
