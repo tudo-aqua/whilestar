@@ -28,7 +28,8 @@ class TransitionSystem(
     val useWhileInvariant: Boolean = true
 ) {
   // Possible system states s\in S_{V,\mu}
-  val vars: List<String> = context.scope.symbols.map { it.key } // V //Also: loc and memory M
+  val vars: MutableList<String> =
+      context.scope.symbols.map { it.key } as MutableList<String> // V //Also: loc and memory M
 
   var initial: BooleanExpression = True // all vars are zero // I
   var transitions: BooleanExpression = True // transition relation //\Gamma
@@ -37,6 +38,7 @@ class TransitionSystem(
   data class LocationID(var id: Int)
 
   val locId = LocationID(0)
+  var uniqueExternVarID: Int = 0
 
   init {
     if (verbose) println("Variables: $vars")
@@ -306,14 +308,32 @@ class TransitionSystem(
   }
 
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {
-    TODO()
+    // This is a new bound variable. It could be removed, but than the code below becomes longer.
+    // (Eq-Block for both Lte and Lt)
+    val boundVar = Variable("ext_${uniqueExternVarID++}")
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        Lte(NumericLiteral(this.lower), ValAtAddr(Variable("${this.addr}'"))),
-        Lt(ValAtAddr(Variable("${this.addr}'")), NumericLiteral(this.upper)),
+        Lte(NumericLiteral(this.lower), ValAtAddr(boundVar)),
+        Lt(ValAtAddr(boundVar), NumericLiteral(this.upper)),
+        Eq(
+            ValAtAddr(AnyArrayPrimed),
+            ValAtAddr(
+                ArrayWrite(
+                    AnyArray,
+                    when (this.addr) { // Addressing depending on type
+                      is Variable -> ValAtAddr(this.addr)
+                      is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference)))
+                      is ArrayAccess ->
+                          Add(
+                              ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
+                              prepareOnMemory(this.addr.index))
+                      else -> throw Exception("Unsupported address in Havoc.")
+                    },
+                    ValAtAddr(boundVar))),
+            0),
         vars
-            .filter { it != this.addr.toString() }
+            .filter { it != boundVar.name }
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
