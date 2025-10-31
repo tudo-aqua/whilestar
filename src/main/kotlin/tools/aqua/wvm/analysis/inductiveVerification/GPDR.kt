@@ -25,6 +25,8 @@ import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.hoare.Entailment
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
+import tools.aqua.wvm.language.AnyArray
+import tools.aqua.wvm.language.ArrayRead
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Eq
 import tools.aqua.wvm.language.Not
@@ -169,12 +171,34 @@ class GPDR(
   }
 
   private fun Map<String, String>.toFormula(): BooleanExpression {
-    TODO("THIS DOES NOT WORK WITH ARRAYS YET. NEEDS TO BE FIXED.")
     val map = this.toMutableMap()
     transitionSystem.vars.forEach {
       if (!this.containsKey(it)) map[it] = "0"
     } // Add missing variables as 0
-    return map.map { Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0) }
+    return map.map {
+          when (it.key) {
+            "M_", "M" -> it.value.toArrayFormula()
+            else -> Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
+          }
+        }
+        .reduceOrDefault(True) { acc, next -> And(acc, next) }
+  }
+
+  private fun String.toArrayFormula(): BooleanExpression {
+    val regex = """\(asConst \d+\)""".toRegex()
+    val match = regex.matchEntire(this)
+    val number = match?.value?.removePrefix("(asConst ")?.removeSuffix(")")?.toInt() ?: 0
+    val memorySize =
+        context.scope.symbols
+            .map { it.value.size }
+            .reduceOrDefault(0) { acc, next -> acc + next } // size of memory M
+    return (0 until memorySize)
+        .map {
+          Eq(
+              ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
+              NumericLiteral(number.toBigInteger()),
+              0)
+        }
         .reduceOrDefault(True) { acc, next -> And(acc, next) }
   }
 
@@ -194,9 +218,9 @@ class GPDR(
     return Or(
         initial,
         And(
-            R.renameVariables(vars.plus("loc").associateWith { "${it}0" }),
+            R.renameVariables(vars.plus("loc").plus("M").associateWith { "${it}0" }),
             transitionSystem.transitions.renameVariables(
-                vars.plus("loc").associateWith { "${it}0" } +
-                    vars.plus("loc").map { "${it}'" }.associateWith { it.removeSuffix("'") })))
+                vars.plus("loc").plus("M").associateWith { "${it}0" } +
+                    vars.plus("loc").plus("M").map { "${it}'" }.associateWith { it.removeSuffix("'") })))
   }
 }

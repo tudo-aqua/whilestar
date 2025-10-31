@@ -25,6 +25,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
+import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
 import tools.aqua.wvm.analysis.inductiveVerification.GPDR
@@ -55,6 +56,10 @@ class While : CliktCommand() {
 
   private val gpdr: Boolean by option("-g", "--gpdr", help = "run gpdr checker").flag()
 
+  // TODO: Make sure this is properly implemented throughout the codebase
+  private val booleanEvaluation: Boolean by
+      option("-B", "--boolean-eval", help = "enable boolean evaluation for gpdr").flag()
+
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
@@ -73,7 +78,6 @@ class While : CliktCommand() {
       if (externalInput) {
         context.input = Scanner(System.`in`)
       }
-      val booleanEvaluation = true
 
       if (verbose) {
         println("=============================================")
@@ -100,7 +104,10 @@ class While : CliktCommand() {
         println("=========== Running proof system: ===========")
         val out = Output()
         val wps = WPCProofSystem(context, out)
-        wps.proof()
+        val result = wps.check()
+        println("# Safe: ${result.safe}")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
         println("=============================================")
       }
 
@@ -109,6 +116,9 @@ class While : CliktCommand() {
         val out = Output()
         val bmcChecker = BMCSafetyChecker(context, out, verbose)
         val result = bmcChecker.check()
+        println("# Safe: ${result.safe}")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
         println("=============================================")
       }
 
@@ -116,7 +126,10 @@ class While : CliktCommand() {
         println("======== Running k-induction checker: =======")
         val out = Output()
         val kIndChecker = KInductionChecker(context, out, verbose)
-        kIndChecker.check()
+        val result = kIndChecker.check()
+        println("# Safe: ${result.safe}")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
         println("=============================================")
       }
 
@@ -124,7 +137,10 @@ class While : CliktCommand() {
         println("=========== Running GPDR checker: ===========")
         val out = Output()
         val gpdrChecker = GPDR(context, out, verbose, booleanEvaluation)
-        gpdrChecker.check()
+        val result = gpdrChecker.check()
+        println("# Safe: ${result.safe}")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
         println("=============================================")
       }
 

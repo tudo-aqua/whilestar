@@ -164,9 +164,9 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
               throw Exception("Unkown UserDeclaredExpression $expr")
             }
         is ArraySelect ->
-            ArrayRead(
+            ValAtAddr(ArrayRead(
                 asExpression(expr.array) as ArrayExpression,
-                asExpression(expr.index) as ArithmeticExpression)
+                asExpression(expr.index) as ArithmeticExpression))
         is ArrayStore ->
             ArrayWrite(
                 asExpression(expr.array) as ArrayExpression,
@@ -262,7 +262,7 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
       // or 1
       val booleanVars =
           vars.keys
-              .filter { it != "M_" && it != "loc" }
+              .filter { vars[it]?.sort !is ArraySort && it != "loc" }
               .map {
                 Or(
                     Eq(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger()), 0),
