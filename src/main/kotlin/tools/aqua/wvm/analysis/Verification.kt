@@ -28,6 +28,15 @@ sealed class VerificationResult {
   val safe: Boolean
     get() = this is Proof
 
+  override fun toString(): String {
+    return when (this) {
+        is Proof -> "Proof"
+        is Counterexample -> "Counterexample"
+        is NoResult -> "NoResult"
+        is Crash -> "Crash"
+    }
+  }
+
   data class Proof(override val message: String? = null, val proof: String? = null) :
       VerificationResult()
 

@@ -63,11 +63,13 @@ class While : CliktCommand() {
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
+  private val warmup: Boolean by option("--warmup", help = "For measuring without any operation").flag()
+
   private val filename: String by argument(help = "source file to interpret")
 
   override fun run() {
 
-    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd && !gpdr) {
+    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd && !gpdr && !warmup) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -77,6 +79,10 @@ class While : CliktCommand() {
       val context = Parser.parse(source)
       if (externalInput) {
         context.input = Scanner(System.`in`)
+      }
+      if (warmup) {
+        println("Doing only warmup. Done. Returning.")
+        return
       }
 
       if (verbose) {
@@ -105,7 +111,7 @@ class While : CliktCommand() {
         val out = Output()
         val wps = WPCProofSystem(context, out)
         val result = wps.check()
-        println("# Safe: ${result.safe}")
+        println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
         println("=============================================")
@@ -116,7 +122,7 @@ class While : CliktCommand() {
         val out = Output()
         val bmcChecker = BMCSafetyChecker(context, out, verbose)
         val result = bmcChecker.check()
-        println("# Safe: ${result.safe}")
+        println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
         println("=============================================")
@@ -127,7 +133,7 @@ class While : CliktCommand() {
         val out = Output()
         val kIndChecker = KInductionChecker(context, out, verbose)
         val result = kIndChecker.check()
-        println("# Safe: ${result.safe}")
+        println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
         println("=============================================")
@@ -138,7 +144,7 @@ class While : CliktCommand() {
         val out = Output()
         val gpdrChecker = GPDR(context, out, verbose, booleanEvaluation)
         val result = gpdrChecker.check()
-        println("# Safe: ${result.safe}")
+        println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
         println("=============================================")
@@ -174,3 +180,4 @@ class While : CliktCommand() {
 }
 
 fun main(args: Array<String>) = While().main(args)
+//fun main(args: Array<String>) = While().main(listOf("-gB", "examples/gpdr-examples/ex1.w"))
