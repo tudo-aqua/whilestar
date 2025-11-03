@@ -79,7 +79,7 @@ data class Context(
     }
 
     if (verbose) println("end.")
-    print("Size: ${root.flatten().size}")
+    if (verbose) println("Size of Execution tree: ${root.flatten().size}")
     if (symbolic) {
       return Pair(root, root.unsafePaths(post))
     } else {
