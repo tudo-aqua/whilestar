@@ -129,23 +129,24 @@ class Parser(restricted: Boolean = false) {
   private val addressExpr = undefined()
 
   init {
-      if (!restricted) {
-          deref.set(
-              identifier.map { result: String -> Variable(result) } +
-                      (star * deref).map { results: List<Any> -> DeRef(results[1] as AddressExpression) })
-      } else {
-          deref.set(identifier.map { result: String -> Variable(result) })
-      }
+    if (!restricted) {
+      deref.set(
+          identifier.map { result: String -> Variable(result) } +
+              (star * deref).map { results: List<Any> -> DeRef(results[1] as AddressExpression) })
+    } else {
+      deref.set(identifier.map { result: String -> Variable(result) })
+    }
   }
 
   init {
     if (!restricted) {
-        addressExpr.set(
-            (deref * lsbr * arithExpr * rsbr).map { results: List<Any> ->
-                ArrayAccess(ValAtAddr(results[0] as AddressExpression), results[2] as ArithmeticExpression)
-            } + deref.map { deref: AddressExpression -> deref })
+      addressExpr.set(
+          (deref * lsbr * arithExpr * rsbr).map { results: List<Any> ->
+            ArrayAccess(
+                ValAtAddr(results[0] as AddressExpression), results[2] as ArithmeticExpression)
+          } + deref.map { deref: AddressExpression -> deref })
     } else {
-        addressExpr.set(deref.map { deref: AddressExpression -> deref })
+      addressExpr.set(deref.map { deref: AddressExpression -> deref })
     }
   }
 
@@ -291,12 +292,15 @@ class Parser(restricted: Boolean = false) {
             Pointer(BasicType.INT))
       } + star.star().map { results: List<Any> -> Pair(1, buildType(results.size)) }
 
-  private val decl = if (!restricted)
-      (intKW * typeSize * identifier * semicolon).map { results: List<Any> ->
-        Pair(results[2], results[1])}
-    else
-        (intKW * identifier * semicolon).map { results: List<Any> ->
-            Pair(results[1], Pair(1, BasicType.INT)) }
+  private val decl =
+      if (!restricted)
+          (intKW * typeSize * identifier * semicolon).map { results: List<Any> ->
+            Pair(results[2], results[1])
+          }
+      else
+          (intKW * identifier * semicolon).map { results: List<Any> ->
+            Pair(results[1], Pair(1, BasicType.INT))
+          }
 
   private fun buildScope(entries: List<Pair<String, Pair<Int, Type>>>): Scope {
     val info = HashMap<String, Scope.ElementInfo>()

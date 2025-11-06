@@ -44,21 +44,21 @@ class SMTSolver {
     vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
   }
 
-  fun asKonstraint(expr:ArrayExpression) : Expression<*> = when (expr) {
-    is AnyArray ->
-      UserDeclaredExpression(
-        Symbol(memArray),
-        ArraySort(IntSort, IntSort))
-    is ArrayRead ->
-      ArraySelect(
-        asKonstraint(expr.array) as Expression<ArraySort<IntSort,IntSort>>,
-        asKonstraint(expr.index)) as Expression<IntSort>
-    is ArrayWrite ->
-      ArrayStore(
-        asKonstraint(expr.array) as Expression<ArraySort<IntSort,IntSort>>,
-        asKonstraint(expr.index), asKonstraint(expr.value))
-    else -> throw Exception("oh no")
-  }
+  fun asKonstraint(expr: ArrayExpression): Expression<*> =
+      when (expr) {
+        is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+        is ArrayRead ->
+            ArraySelect(
+                asKonstraint(expr.array) as Expression<ArraySort<IntSort, IntSort>>,
+                asKonstraint(expr.index))
+                as Expression<IntSort>
+        is ArrayWrite ->
+            ArrayStore(
+                asKonstraint(expr.array) as Expression<ArraySort<IntSort, IntSort>>,
+                asKonstraint(expr.index),
+                asKonstraint(expr.value))
+        else -> throw Exception("oh no")
+      }
 
   fun asKonstraint(expr: AddressExpression): Expression<IntSort> {
     if (expr is Variable) {
