@@ -124,45 +124,47 @@ fun cfg(seq: List<Statement>): CFG =
     if (seq.isEmpty()) EmptyCFG else compose(cfg(seq.first()), listOf(cfg(seq.drop(1))))
 
 fun cfgToMermaid(cfg: CFG): String {
-    val nodes = cfg.nodes()
-    val edges = cfg.edges()
-    val initialNode = cfg.initial().toSet()
-    val finalNode = cfg.final().toSet()
+  val nodes = cfg.nodes()
+  val edges = cfg.edges()
+  val initialNode = cfg.initial().toSet()
+  val finalNode = cfg.final().toSet()
 
-    return buildString {
-        appendLine("graph TD")
+  return buildString {
+    appendLine("graph TD")
 
-        for((index, node) in nodes.withIndex()) {
-            var nodeLabel = node.stmt.toIndentedString("")
-            when(node.stmt) {
-                is While -> nodeLabel = nodeLabel.substringBefore("invariant")
-                is IfThenElse -> nodeLabel = nodeLabel.substringBefore("{")
-                else -> {}
-            }
+    for ((index, node) in nodes.withIndex()) {
+      var nodeLabel = node.stmt.toIndentedString("")
+      when (node.stmt) {
+        is While -> nodeLabel = nodeLabel.substringBefore("invariant")
+        is IfThenElse -> nodeLabel = nodeLabel.substringBefore("{")
+        else -> {}
+      }
 
-            nodeLabel = nodeLabel.replace("\"", "#quot;")
-            appendLine("$index[\"${nodeLabel}\"]")
-        }
-
-        for(edge in edges) {
-
-            when(edge.from.stmt) {
-                is While -> if(edge.from.stmt.body.head() == edge.to.stmt) {
-                        appendLine("${nodes.indexOf(edge.from)} --true--> ${nodes.indexOf(edge.to)}")
-                    } else {
-                        appendLine("${nodes.indexOf(edge.from)} --false--> ${nodes.indexOf(edge.to)}")
-                    }
-                is IfThenElse -> if(edge.from.stmt.thenBlock.statements.first() == edge.to.stmt){
-                        appendLine("${nodes.indexOf(edge.from)} --true--> ${nodes.indexOf(edge.to)}")
-                    } else {
-                        appendLine("${nodes.indexOf(edge.from)} --false--> ${nodes.indexOf(edge.to)}")
-                    }
-                else -> appendLine("${nodes.indexOf(edge.from)} --> ${nodes.indexOf(edge.to)}")
-            }
-        }
-
-        for((index, node) in nodes.withIndex()) {
-            appendLine("click $index call nodeClick(\"$index\")")
-        }
+      nodeLabel = nodeLabel.replace("\"", "#quot;")
+      appendLine("$index[\"${nodeLabel}\"]")
     }
+
+    for (edge in edges) {
+
+      when (edge.from.stmt) {
+        is While ->
+            if (edge.from.stmt.body.head() == edge.to.stmt) {
+              appendLine("${nodes.indexOf(edge.from)} --true--> ${nodes.indexOf(edge.to)}")
+            } else {
+              appendLine("${nodes.indexOf(edge.from)} --false--> ${nodes.indexOf(edge.to)}")
+            }
+        is IfThenElse ->
+            if (edge.from.stmt.thenBlock.statements.first() == edge.to.stmt) {
+              appendLine("${nodes.indexOf(edge.from)} --true--> ${nodes.indexOf(edge.to)}")
+            } else {
+              appendLine("${nodes.indexOf(edge.from)} --false--> ${nodes.indexOf(edge.to)}")
+            }
+        else -> appendLine("${nodes.indexOf(edge.from)} --> ${nodes.indexOf(edge.to)}")
+      }
+    }
+
+    for ((index, node) in nodes.withIndex()) {
+      appendLine("click $index call nodeClick(\"$index\")")
+    }
+  }
 }

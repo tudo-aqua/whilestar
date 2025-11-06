@@ -18,7 +18,6 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
-import com.sun.org.apache.xpath.internal.operations.Bool
 import tools.aqua.wvm.language.*
 
 fun varsInExpr(expr: Expression<*>): Set<String> =
@@ -32,7 +31,8 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
       is Lt -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Gte -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Lte -> varsInExpr(expr.left) + varsInExpr(expr.right)
-      is BooleanExpression -> error("This Boolean expression is not supported yet $expr ${expr::class}") //TODO!!!
+      is BooleanExpression ->
+          error("This Boolean expression is not supported yet $expr ${expr::class}") // TODO!!!
       else -> error("Unsupported expression for dataflow analysis: $expr")
     }
 

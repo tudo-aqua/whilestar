@@ -69,89 +69,89 @@ data class DataflowAnalysis<F : Fact>(
   fun initialize(cfg: CFG, scope: Scope): Map<CFGNode<*>, Pair<Set<F>, Set<F>>> =
       initialization.initialize(cfg, scope)
 
-      fun next(
-          cfg: CFG,
-          marking: Map<CFGNode<*>, Pair<Set<F>, Set<F>>>
-      ): Map<CFGNode<*>, Pair<Set<F>, Set<F>>> {
-        return cfg.nodes().associateWith { node ->
-          val preds = if (direction == Direction.Forward) cfg.pred(node) else cfg.succ(node)
-          val inFacts: Set<F> =
-              when (type) {
-                AnalysisType.May ->
-                    preds
-                        .flatMap {
-                          if (direction == Direction.Forward) marking[it]!!.second
-                          else marking[it]!!.first
-                        }
-                        .toSet()
-                AnalysisType.Must ->
-                    if (preds.isEmpty()) emptySet()
-                    else {
-                      val init =
-                          if (direction == Direction.Forward) marking[preds.first()]!!.second
-                          else marking[preds.first()]!!.first
-                      preds.drop(1).fold(init) { acc, n ->
-                        acc.intersect(
-                            if (direction == Direction.Forward) marking[n]!!.second
-                            else marking[n]!!.first)
-                      }
+  fun next(
+      cfg: CFG,
+      marking: Map<CFGNode<*>, Pair<Set<F>, Set<F>>>
+  ): Map<CFGNode<*>, Pair<Set<F>, Set<F>>> {
+    return cfg.nodes().associateWith { node ->
+      val preds = if (direction == Direction.Forward) cfg.pred(node) else cfg.succ(node)
+      val inFacts: Set<F> =
+          when (type) {
+            AnalysisType.May ->
+                preds
+                    .flatMap {
+                      if (direction == Direction.Forward) marking[it]!!.second
+                      else marking[it]!!.first
                     }
-              } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
-          val outFacts =
-              when (node.stmt) {
-                is IfThenElse ->
-                    (inFacts.filter { !ifKill.kill(it, node as CFGNode<IfThenElse>) } +
-                            ifGen.gen(node as CFGNode<IfThenElse>))
-                        .toSet()
-                is While ->
-                    (inFacts.filter { !whileKill.kill(it, node as CFGNode<While>) } +
-                            whileGen.gen(node as CFGNode<While>))
-                        .toSet()
-                is Assignment ->
-                    (inFacts.filter { !assignKill.kill(it, node as CFGNode<Assignment>) } +
-                            assignGen.gen(node as CFGNode<Assignment>))
-                        .toSet()
-                is Fail ->
-                    (inFacts.filter { !failKill.kill(it, node as CFGNode<Fail>) } +
-                            failGen.gen(node as CFGNode<Fail>))
-                        .toSet()
-                is Havoc ->
-                    (inFacts.filter { !havocKill.kill(it, node as CFGNode<Havoc>) } +
-                            havocGen.gen(node as CFGNode<Havoc>))
-                        .toSet()
-                is Print ->
-                    (inFacts.filter { !printKill.kill(it, node as CFGNode<Print>) } +
-                            printGen.gen(node as CFGNode<Print>))
-                        .toSet()
-                is Swap ->
-                    (inFacts.filter { !swapKill.kill(it, node as CFGNode<Swap>) } +
-                            swapGen.gen(node as CFGNode<Swap>))
-                        .toSet()
-              }
+                    .toSet()
+            AnalysisType.Must ->
+                if (preds.isEmpty()) emptySet()
+                else {
+                  val init =
+                      if (direction == Direction.Forward) marking[preds.first()]!!.second
+                      else marking[preds.first()]!!.first
+                  preds.drop(1).fold(init) { acc, n ->
+                    acc.intersect(
+                        if (direction == Direction.Forward) marking[n]!!.second
+                        else marking[n]!!.first)
+                  }
+                }
+          } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
+      val outFacts =
+          when (node.stmt) {
+            is IfThenElse ->
+                (inFacts.filter { !ifKill.kill(it, node as CFGNode<IfThenElse>) } +
+                        ifGen.gen(node as CFGNode<IfThenElse>))
+                    .toSet()
+            is While ->
+                (inFacts.filter { !whileKill.kill(it, node as CFGNode<While>) } +
+                        whileGen.gen(node as CFGNode<While>))
+                    .toSet()
+            is Assignment ->
+                (inFacts.filter { !assignKill.kill(it, node as CFGNode<Assignment>) } +
+                        assignGen.gen(node as CFGNode<Assignment>))
+                    .toSet()
+            is Fail ->
+                (inFacts.filter { !failKill.kill(it, node as CFGNode<Fail>) } +
+                        failGen.gen(node as CFGNode<Fail>))
+                    .toSet()
+            is Havoc ->
+                (inFacts.filter { !havocKill.kill(it, node as CFGNode<Havoc>) } +
+                        havocGen.gen(node as CFGNode<Havoc>))
+                    .toSet()
+            is Print ->
+                (inFacts.filter { !printKill.kill(it, node as CFGNode<Print>) } +
+                        printGen.gen(node as CFGNode<Print>))
+                    .toSet()
+            is Swap ->
+                (inFacts.filter { !swapKill.kill(it, node as CFGNode<Swap>) } +
+                        swapGen.gen(node as CFGNode<Swap>))
+                    .toSet()
+          }
 
-                if (direction == Direction.Forward)
-                    Pair(inFacts, outFacts)
-                else
-                    Pair(outFacts, inFacts)
-            }
-        }
+      if (direction == Direction.Forward) Pair(inFacts, outFacts) else Pair(outFacts, inFacts)
+    }
+  }
 
   fun isFixedPoint(cfg: CFG, marking: Map<CFGNode<*>, Pair<Set<F>, Set<F>>>) =
       next(cfg, marking).all { (n, f) -> f == marking[n] }
 
-fun dataAnalysisExternal(cfg: CFG, scope: Scope): List<Map<CFGNode<*>, Pair<Set<Fact>, Set<Fact>>>> {
+  fun dataAnalysisExternal(
+      cfg: CFG,
+      scope: Scope
+  ): List<Map<CFGNode<*>, Pair<Set<Fact>, Set<Fact>>>> {
     val log = mutableListOf<Map<CFGNode<*>, Pair<Set<Fact>, Set<Fact>>>>()
 
     var marking = this.initialize(cfg, scope)
     log.add(marking)
 
     while (!this.isFixedPoint(cfg, marking)) {
-        marking = this.next(cfg, marking)
-        log.add(marking)
+      marking = this.next(cfg, marking)
+      log.add(marking)
     }
 
-        return log
-}
+    return log
+  }
 
   // abstract fun check()
 }
