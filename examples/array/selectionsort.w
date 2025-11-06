@@ -31,3 +31,4 @@ code:
     print "out: ", feld[i1]; 
     i1 := i1 + 1;
   };
+post: (feld[0] <= feld[1])

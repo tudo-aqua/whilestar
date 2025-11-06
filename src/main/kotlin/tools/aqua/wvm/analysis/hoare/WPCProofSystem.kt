@@ -341,7 +341,8 @@ class WPCProofSystem(val context: Context, val output: Output) {
       val expr = vc.smtTest()
       output.println("SMT Test: $expr")
       val solver = SMTSolver()
-      val result = solver.solve(vc.smtTest())
+      val test = vc.smtTest()
+      val result = solver.solve(test)
       success = success and (result.status == SatStatus.UNSAT)
       output.println(
           when (result.status) {
