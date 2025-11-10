@@ -42,7 +42,9 @@ data object EmptyCFG : CFG {
   override fun toString(): String = "[]"
 }
 
-data class CFGNode<T : Statement>(val stmt: T)
+class CFGNode<T : Statement>(val stmt: T) {
+  override fun toString(): String = "CFGNode(stmt=$stmt)"
+}
 
 data class SimpleCFG(val node: CFGNode<*>) : CFG {
   override fun nodes(): List<CFGNode<*>> = listOf(node)
@@ -126,8 +128,6 @@ fun cfg(seq: List<Statement>): CFG =
 fun cfgToMermaid(cfg: CFG): String {
   val nodes = cfg.nodes()
   val edges = cfg.edges()
-  val initialNode = cfg.initial().toSet()
-  val finalNode = cfg.final().toSet()
 
   return buildString {
     appendLine("graph TD")
@@ -135,13 +135,14 @@ fun cfgToMermaid(cfg: CFG): String {
     for ((index, node) in nodes.withIndex()) {
       var nodeLabel = node.stmt.toIndentedString("")
       when (node.stmt) {
-        is While -> nodeLabel = nodeLabel.substringBefore("invariant")
+        is While -> nodeLabel = node.stmt.head.toString()
         is IfThenElse -> nodeLabel = nodeLabel.substringBefore("{")
         else -> {}
       }
 
       nodeLabel = nodeLabel.replace("\"", "#quot;")
-      appendLine("$index[\"${nodeLabel}\"]")
+      nodeLabel = nodeLabel.replace("\n", "")
+      appendLine("$index[\"$index &#91${nodeLabel}&#93\"]")
     }
 
     for (edge in edges) {

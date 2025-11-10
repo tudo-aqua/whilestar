@@ -32,6 +32,11 @@ enum class AnalysisType {
   May /* Union */
 }
 
+typealias FactSet<F> = Set<F>
+typealias InOut<F> = Pair<FactSet<F>, FactSet<F>>
+typealias Marking<F> = Map<CFGNode<*>, InOut<F>>
+typealias AnalysisLog<F> = List<Marking<F>>
+
 interface Fact
 
 fun interface Kill<F : Fact, T : Statement> {
@@ -43,7 +48,7 @@ fun interface Gen<F : Fact, T : Statement> {
 }
 
 fun interface Initialization<F : Fact> {
-  fun initialize(cfg: CFG, scope: Scope): Map<CFGNode<*>, Pair<Set<F>, Set<F>>>
+  fun initialize(cfg: CFG, scope: Scope): Marking<F>
 }
 
 data class DataflowAnalysis<F : Fact>(
@@ -63,16 +68,18 @@ data class DataflowAnalysis<F : Fact>(
     val swapGen: Gen<F, Swap> = Gen { emptySet() },
     val swapKill: Kill<F, Swap> = Kill { _, _ -> false },
     val printGen: Gen<F, Print> = Gen { emptySet() },
-    val printKill: Kill<F, Print> = Kill { _, _ -> false }
+    val printKill: Kill<F, Print> = Kill { _, _ -> false },
+    val assertionGen: Gen<F, Assertion> = Gen { emptySet() },
+    val assertionKill: Kill<F, Assertion> = Kill{ _, _ -> false}
 ) {
 
-  fun initialize(cfg: CFG, scope: Scope): Map<CFGNode<*>, Pair<Set<F>, Set<F>>> =
+  fun initialize(cfg: CFG, scope: Scope): Marking<F> =
       initialization.initialize(cfg, scope)
 
   fun next(
       cfg: CFG,
-      marking: Map<CFGNode<*>, Pair<Set<F>, Set<F>>>
-  ): Map<CFGNode<*>, Pair<Set<F>, Set<F>>> {
+      marking: Marking<F>
+  ): Marking<F> {
     return cfg.nodes().associateWith { node ->
       val preds = if (direction == Direction.Forward) cfg.pred(node) else cfg.succ(node)
       val inFacts: Set<F> =
@@ -127,50 +134,39 @@ data class DataflowAnalysis<F : Fact>(
                 (inFacts.filter { !swapKill.kill(it, node as CFGNode<Swap>) } +
                         swapGen.gen(node as CFGNode<Swap>))
                     .toSet()
+            is Assertion ->
+                (inFacts.filter { !assertionKill.kill(it, node as CFGNode<Assertion>) } +
+                        assertionGen.gen(node as CFGNode<Assertion>))
+                    .toSet()
           }
 
       if (direction == Direction.Forward) Pair(inFacts, outFacts) else Pair(outFacts, inFacts)
     }
   }
 
-  fun isFixedPoint(cfg: CFG, marking: Map<CFGNode<*>, Pair<Set<F>, Set<F>>>) =
+  fun isFixedPoint(cfg: CFG, marking: Marking<F>) =
       next(cfg, marking).all { (n, f) -> f == marking[n] }
 
-  fun dataAnalysisExternal(
-      cfg: CFG,
-      scope: Scope
-  ): List<Map<CFGNode<*>, Pair<Set<Fact>, Set<Fact>>>> {
-    val log = mutableListOf<Map<CFGNode<*>, Pair<Set<Fact>, Set<Fact>>>>()
+  fun execute(cfg: CFG, scope: Scope): AnalysisLog<F> {
+    val log = mutableListOf<Marking<F>>()
+    var currentMarking = this.initialize(cfg, scope)
+    log.add(currentMarking)
 
-    var marking = this.initialize(cfg, scope)
-    log.add(marking)
-
-    while (!this.isFixedPoint(cfg, marking)) {
-      marking = this.next(cfg, marking)
-      log.add(marking)
+    while (true) {
+      val nextMarking = this.next(cfg, currentMarking)
+      if (nextMarking == currentMarking) {
+        break
+      }
+      currentMarking = nextMarking
+      log.add(currentMarking)
     }
 
-    return log
+    return log.toList()
   }
 
   // abstract fun check()
 }
 
-/*
-fun ana(cfg: CFG, scope: Scope): List<Map<CFGNode<*>, Pair<Set<F>, Set<F>>>> {
-    val log = mutableListOf<Map<CFGNode<*>, Pair<Set<F>, Set<F>>>>()
-
-    var marking = LVAnalysis.initialize(cfg, scope)
-    log.add(marking)
-
-    while (!LVAnalysis.isFixedPoint(cfg, marking)) {
-        marking = LVAnalysis.next(cfg, marking)
-        log.add(marking)
-    }
-
-    return log
-}
-*/
 fun main() {
 
   val ctx =

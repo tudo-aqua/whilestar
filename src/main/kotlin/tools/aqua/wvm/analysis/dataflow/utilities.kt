@@ -45,6 +45,7 @@ fun varsInStmt(stmt: Statement): Set<String> =
       is Havoc -> varsInExpr(stmt.addr)
       is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)
       is Print -> stmt.values.flatMap { varsInExpr(it) }.toSet()
+      is Assertion -> varsInExpr(stmt.cond)
     }
 
 fun varsInSeq(seq: SequenceOfStatements): Set<String> =
