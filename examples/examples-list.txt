@@ -1,3 +1,5 @@
 gpdr-examples/ex1.w GPDRExample1 true
 gpdr-examples/ex2.w GPDRExample2 false
 gpdr-examples/ex3.w GPDRExample3 true
+array/ex1.w ArrayExample1 true array,pointer
+array/ex2.w ArrayExample2 true array
