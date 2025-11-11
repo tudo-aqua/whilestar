@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.inductiveVerification
 
+import kotlin.toBigInteger
 import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.analysis.VerificationApproach
@@ -216,8 +217,8 @@ class GPDR(
     transitionSystem.vars.forEach {
       if (!this.containsKey(it)) map[it] = "0"
     } // Add missing variables as 0
-    val memoryMapM = map.filter { it.key == "M" }.map { it.value.toArrayFormula() }.getOrNull(0)
-    val memoryMapM_ = map.filter { it.key == "M_" }.map { it.value.toArrayFormula() }.getOrNull(0)
+    val memoryMapM = map.filter { it.key == "M" }.map { it.value.toMemoryMapping() }.getOrNull(0)
+    val memoryMapM_ = map.filter { it.key == "M_" }.map { it.value.toMemoryMapping() }.getOrNull(0)
     val memoryMap = memoryMapM ?: memoryMapM_ ?: emptyMap()
 
     return map.filter { it.key != "M" && it.key != "M_" }
@@ -227,7 +228,11 @@ class GPDR(
           } else if (memoryMap[it.value.toInt()] != null) {
             And(
                 Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0),
-                memoryMap[it.value.toInt()] ?: True)
+                Eq(
+                    ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
+                    NumericLiteral(memoryMap[it.value.toInt()]!!.toBigInteger()),
+                    0))
+            // Note: Changing this to have the variable, not the index improved performance
           } else {
             Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
           }
@@ -235,7 +240,7 @@ class GPDR(
         .reduceOrDefault(True) { acc, next -> And(acc, next) }
   }
 
-  private fun String.toArrayFormula(): Map<Int, BooleanExpression> {
+  private fun String.toMemoryMapping(): Map<Int, Int> {
     val mapping = mutableMapOf<Int, Int>()
     val constantRegex = """\(asConst \d+\)""".toRegex()
     val storeRegex = """\(store\s+\((.*?)\)\s+(\d+)\s+(\d+)\)""".toRegex()
@@ -253,12 +258,7 @@ class GPDR(
         context.scope.symbols
             .map { it.value.size }
             .reduceOrDefault(0) { acc, next -> acc + next } // size of memory M
-    return (0 until memorySize).associateWith {
-      Eq(
-          ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
-          NumericLiteral(mapping[it]?.toBigInteger() ?: constantNumber.toBigInteger()),
-          0)
-    }
+    return (0 until memorySize).associateWith { mapping[it] ?: constantNumber }
   }
 
   private fun testEntailment(
