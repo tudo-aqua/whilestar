@@ -48,89 +48,94 @@ class KInductionChecker(
   val transitionSystem = TransitionSystem(context, verbose)
 
   override fun check(): VerificationResult {
-    for (k in 1..kBound) {
-      out.println("=== K-Induction with k = $k ===")
-      // 0. Depth check TODO: Should the normal one even have a depth check too?
-      val depthCheckTransitions =
-          (2..k)
-              .map { transitionSystem.numberedTransitions(it - 2, it - 1) }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val depthCheck = And(transitionSystem.zeroedInitial(), depthCheckTransitions)
-      if (verbose) out.println("SMT test for depth check: $depthCheck")
-      val depthResult = SMTSolver().solve(depthCheck)
-      when (depthResult.status) {
-        SatStatus.SAT -> out.println("Depth check passed. ${depthResult.model.toSortedMap()}")
-        SatStatus.UNSAT -> {
-          out.println("Depth check failed. Program may be shorter than k = $k.")
-          return Proof("Program is exhausted before k = $k.")
+    try {
+      for (k in 1..kBound) {
+        out.println("=== K-Induction with k = $k ===")
+        // 0. Depth check TODO: Should the normal one even have a depth check too?
+        val depthCheckTransitions =
+            (2..k)
+                .map { transitionSystem.numberedTransitions(it - 2, it - 1) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }
+        val depthCheck = And(transitionSystem.zeroedInitial(), depthCheckTransitions)
+        if (verbose) out.println("SMT test for depth check: $depthCheck")
+        val depthResult = SMTSolver().solve(depthCheck)
+        when (depthResult.status) {
+          SatStatus.SAT -> out.println("Depth check passed. ${depthResult.model.toSortedMap()}")
+          SatStatus.UNSAT -> {
+            out.println("Depth check failed. Program may be shorter than k = $k.")
+            return Proof("Program is exhausted before k = $k.")
+          }
+          SatStatus.UNKNOWN -> {
+            out.println("Depth check at k = $k could not be decided.")
+            return Crash("BMC: Depth check at k = $k could not be decided.")
+          }
+          SatStatus.PENDING -> {
+            out.println("Error during SMT solving of depth check at k = $k.")
+            return Crash("BMC: Depth check at k = $k exited with an error during solving.")
+          }
         }
-        SatStatus.UNKNOWN -> {
-          out.println("Depth check at k = $k could not be decided.")
-          return Crash("BMC: Depth check at k = $k could not be decided.")
-        }
-        SatStatus.PENDING -> {
-          out.println("Error during SMT solving of depth check at k = $k.")
-          return Crash("BMC: Depth check at k = $k exited with an error during solving.")
-        }
-      }
 
-      // 1. Base case (== (k-1)-safety)
-      val properties =
-          (0..k - 1)
-              .map { transitionSystem.numberedInvariant(it) }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val basis = Entailment(depthCheck, properties, "K-Induction base case for k = $k")
-      if (verbose) out.println("SMT test for base case: $basis")
-      val baseResult = SMTSolver().solve(basis.smtTest())
-      when (baseResult.status) {
-        SatStatus.UNSAT -> out.println("Base case passed.")
-        SatStatus.SAT -> {
-          out.println(
-              "Base case failed. ${k - 1}-safety does not hold. Counterexample: ${baseResult.model.toSortedMap()}")
-          return Counterexample(
-              "Base case failed. ${k - 1}-safety does not hold.", baseResult.model.toString())
-        }
-        SatStatus.UNKNOWN -> {
-          out.println("Base case could not be decided.")
-          return Crash("K-Induction: Base case at k = $k could not be decided.")
-        }
-        SatStatus.PENDING -> {
-          out.println("Error during SMT solving of base case.")
-          return Crash("K-Induction: Base case at k = $k exited with an error during solving.")
-        }
-      }
-
-      // 2. Inductive step
-      val kDepthTransitions =
-          (1..k)
-              .map { transitionSystem.numberedTransitions(it - 1, it) }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val step =
-          Entailment(
-              And(kDepthTransitions, properties),
-              transitionSystem.numberedInvariant(k),
-              "K-Induction step for k = $k")
-      if (verbose) out.println("SMT test for inductive step: $step")
-      val stepResult = SMTSolver().solve(step.smtTest())
-      when (stepResult.status) {
-        SatStatus.UNSAT -> {
-          out.println("Inductive step passed. Program is safe by k-induction with k = $k.")
-          return Proof("Inductive step passed. Program is safe by k-induction with k = $k.")
-        }
-        SatStatus.SAT ->
+        // 1. Base case (== (k-1)-safety)
+        val properties =
+            (0..k - 1)
+                .map { transitionSystem.numberedInvariant(it) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }
+        val basis = Entailment(depthCheck, properties, "K-Induction base case for k = $k")
+        if (verbose) out.println("SMT test for base case: $basis")
+        val baseResult = SMTSolver().solve(basis.smtTest())
+        when (baseResult.status) {
+          SatStatus.UNSAT -> out.println("Base case passed.")
+          SatStatus.SAT -> {
             out.println(
-                "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${stepResult.model.toSortedMap()}")
-        SatStatus.UNKNOWN -> {
-          out.println("Inductive step could not be decided.")
-          return Crash("K-Induction: Inductive step at k = $k could not be decided.")
+                "Base case failed. ${k - 1}-safety does not hold. Counterexample: ${baseResult.model.toSortedMap()}")
+            return Counterexample(
+                "Base case failed. ${k - 1}-safety does not hold.", baseResult.model.toString())
+          }
+          SatStatus.UNKNOWN -> {
+            out.println("Base case could not be decided.")
+            return Crash("K-Induction: Base case at k = $k could not be decided.")
+          }
+          SatStatus.PENDING -> {
+            out.println("Error during SMT solving of base case.")
+            return Crash("K-Induction: Base case at k = $k exited with an error during solving.")
+          }
         }
-        SatStatus.PENDING -> {
-          out.println("Error during SMT solving of inductive step.")
-          return Crash("K-Induction: Inductive step at k = $k exited with an error during solving.")
+
+        // 2. Inductive step
+        val kDepthTransitions =
+            (1..k)
+                .map { transitionSystem.numberedTransitions(it - 1, it) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }
+        val step =
+            Entailment(
+                And(kDepthTransitions, properties),
+                transitionSystem.numberedInvariant(k),
+                "K-Induction step for k = $k")
+        if (verbose) out.println("SMT test for inductive step: $step")
+        val stepResult = SMTSolver().solve(step.smtTest())
+        when (stepResult.status) {
+          SatStatus.UNSAT -> {
+            out.println("Inductive step passed. Program is safe by k-induction with k = $k.")
+            return Proof("Inductive step passed. Program is safe by k-induction with k = $k.")
+          }
+          SatStatus.SAT ->
+              out.println(
+                  "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${stepResult.model.toSortedMap()}")
+          SatStatus.UNKNOWN -> {
+            out.println("Inductive step could not be decided.")
+            return Crash("K-Induction: Inductive step at k = $k could not be decided.")
+          }
+          SatStatus.PENDING -> {
+            out.println("Error during SMT solving of inductive step.")
+            return Crash(
+                "K-Induction: Inductive step at k = $k exited with an error during solving.")
+          }
         }
       }
+      return NoResult("Could not prove safety up to k = $kBound.")
+    } catch (e: RuntimeException) {
+      return Crash("K-Induction Checker crashed with exception: ${e.message}", e)
     }
-    return NoResult("Could not prove safety up to k = $kBound.")
   }
 }
 
