@@ -70,20 +70,20 @@ class TransitionSystem(
           when {
             it.value.type == BasicType.INT ->
                 listOf( // integer variable initialized to 0
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0),
                     Eq(
-                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
+                        ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
                         NumericLiteral(0.toBigInteger()),
                         0))
             it.value.type is Pointer && it.value.size == 1 ->
                 listOf( // pointer to integer initialized to 0
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0),
                     Eq(
-                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
+                        ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
                         NumericLiteral(0.toBigInteger()),
                         0))
             it.value.size > 1 ->
-                listOf( // array initialized to 0
+                listOf( // array initialized to 0 TODO: Maybe change this to variable instead of index notation as well.
                     Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
                     Eq(
                         ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
