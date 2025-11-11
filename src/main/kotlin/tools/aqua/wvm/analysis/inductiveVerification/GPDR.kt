@@ -29,6 +29,9 @@ import tools.aqua.wvm.language.AnyArray
 import tools.aqua.wvm.language.ArrayRead
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Eq
+import tools.aqua.wvm.language.Gte
+import tools.aqua.wvm.language.Lt
+import tools.aqua.wvm.language.Lte
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.NumericLiteral
 import tools.aqua.wvm.language.Or
@@ -44,16 +47,44 @@ class GPDR(
     override val out: Output = Output(),
     override val verbose: Boolean = false,
     val booleanEvaluation: Boolean = false,
+    val doApproxRefinementChecks: Boolean = false,
     val bound: Int = 100
 ) : VerificationApproach {
   override val name: String = "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""}"
   val transitionSystem = TransitionSystem(context, verbose)
 
-  val initial = transitionSystem.initial
-  // And(transitionSystem.context.pre, Eq(ValAtAddr(Variable("loc")),
-  // NumericLiteral(0.toBigInteger()), 0))
   // TODO: Test if initial is satisfiable at all
+  val initial = transitionSystem.initial
   var safety = transitionSystem.invariant // Safety property S
+
+  val booleanVariableConstraint: BooleanExpression =
+      transitionSystem.vars
+          .map {
+            And(
+                Gte(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger())),
+                Lt(
+                    ValAtAddr(Variable(it)),
+                    NumericLiteral(transitionSystem.memorySize.toBigInteger())))
+          }
+          .reduceOrDefault(True) { acc, next -> And(acc, next) }
+  val booleanMemoryConstraint: BooleanExpression =
+      (0..transitionSystem.memorySize - 1)
+          .map {
+            And(
+                Gte(
+                    ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
+                    NumericLiteral(0.toBigInteger())),
+                Lte(
+                    ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
+                    NumericLiteral(1.toBigInteger())))
+          }
+          .reduceOrDefault(True) { acc, next -> And(acc, next) }
+  val locConstraint = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
+  val booleanEvaluationConstraint =
+      And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
+  val booleanEvaluationConstraintStep =
+      booleanEvaluationConstraint.renameVariables(
+          transitionSystem.vars.plus("loc").plus("M").associateWith { "${it}0" })
 
   // R_0, R_1, ... are a sequence of over-approximations of the reachable states (in i or fewer
   // steps)
@@ -64,6 +95,8 @@ class GPDR(
   // {predicateTransform(R_i)} \subseteq {R_{i+1}}
 
   override fun check(): VerificationResult {
+    if (verbose) println("Transitions: ${transitionSystem.transitions}")
+    if (verbose) println("Invariant: $safety")
     // INITIALIZE
     val candidateModels: MutableList<Pair<BooleanExpression, Int>> = mutableListOf()
     val approximations: MutableList<BooleanExpression> =
@@ -74,12 +107,17 @@ class GPDR(
     // TODO: Make sure the initial is actually reachable/satisfiable
 
     while (iteration < bound) {
+      if (verbose) out.println("--- Current Approximations")
+      for (i in 0..N) {
+        // approximations[i] = approximations[i].simplify()
+        if (verbose) out.println("R_$i: ${approximations[i]}")
+      }
       iteration += 1
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?
       if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
-        out.println("System is VALID.")
+        out.println("System is VALID R_${N-1} models R_${N-2}.")
         return VerificationResult.Proof("System is VALID.")
       }
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
@@ -90,23 +128,27 @@ class GPDR(
       }
       // UNFOLD: We look one step ahead as soon as we are sure that the system is safe for N steps:
       // if R_N \models S, then N := N + 1 and R_N := True
-      if (testEntailment(approximations[N], safety)) {
+      if (testEntailment(And(approximations[N], booleanEvaluationConstraint), safety)) {
         out.println("UNFOLD: System is ${N}-safe, increasing bound.")
-        approximations.add(True)
+        approximations.add(if (booleanEvaluation) booleanEvaluationConstraint else True)
         N += 1
         continue
       }
       // INDUCTION: We may already have inductive properties in our R_i (just not strong enough for
-      // our final goal)
-      // (Useful to apply immediately following UNFOLD and CONFLICT)
-      // TODO: Check this code:
-      if (N > 0 && false) {
-        val i = N - 1 // TODO: can be anything in 0 … N-1
-        val phi = approximations[i] // TODO: phi can be anything (?) How to choose?
-        if ((N > 0) && testEntailment(F(And(approximations[i], phi)), phi)) {
+      // our final goal) (Useful to apply immediately following UNFOLD and CONFLICT)
+      if (N > 0) {
+        val i = N - 1 // Rule: can be anything in 0 … N-1
+        // phi can be any disjunct of a disjunction. The approximations are conjunctions of clauses.
+        val phi = approximations[i]
+        if ((N > 0) && testEntailment(F(phi), phi)) {
+          println(
+              "INDUCTION: Strengthening approximations with inductive property at level $i: $phi")
           approximations.forEachIndexed { j, it ->
             when (j) {
-              in 1..N -> approximations[j] = if (it is True) phi else And(it, phi)
+              in 1..N ->
+                  if (!doApproxRefinementChecks || !testEntailment(approximations[j], phi)) {
+                    approximations[j] = if (it is True) phi else And(it, phi)
+                  }
             }
           }
         }
@@ -115,53 +157,52 @@ class GPDR(
       // if M \models R_N \wedge \not S(x), then produce candidate <M, N>
       if (candidateModels.isEmpty()) {
         val test = And(approximations[N], Not(safety)) // R_N \wedge \not S(x)
-        val result = SMTSolver(booleanEvaluation).solve(test)
+        val result = SMTSolver().solve(And(booleanEvaluationConstraint, test))
         if (result.status == SatStatus.SAT) {
           candidateModels.add(Pair(result.model.toFormula(), N))
           out.println("CANDIDATE: Model <${result.model.toFormula()}, $N>")
         } else {
-          out.println("No candidate model found. Is the system VALID? Check this further!!") // TODO
-          return VerificationResult.Crash("This should not happen. No candidate model found.")
+          return VerificationResult.Crash("No candidate model found, but also not safe. => Error.")
         }
       }
       if (!candidateModels.isEmpty()) {
         val (model, i) = candidateModels.first()
-        // val result =
-
-        // Interpolant // TODO: Calculate with Z3 // actually: not_phi
+        // Interpolant // actually: not_phi
         val step = F(approximations[i - 1])
-        val phi = SMTSolver(booleanEvaluation).computeInterpolant(step, model)
+        val phi = computeInterpolant(step, model)
 
-        if (phi != null) { // interpolant exists
-          // CONFLICT: If the model actually contains an interpolant, we refine our
-          // over-approximation:
-          // For 0 <= i < N, given a candidate model <M, i+1> and clause \phi, such that M \models
-          // \not\phi,
+        if (phi != null) { // Interpolant exists
+          // CONFLICT: The model actually contains an interpolant, so refine over-approximation:
+          // For 0<=i<N, given a candidate <M, i+1> and clause \phi, such that M \models \not\phi,
           // if \mathcal{F}(R_i) \models \phi, then conjoin \phi to R_j for j <= i+1
           out.println("CONFLICT: Found interpolant at level $i: $phi")
           approximations.forEachIndexed { j, it ->
             when (j) {
-              in 1..i -> approximations[j] = if (it is True) phi else And(it, phi)
+              in 1..i -> {
+                if (!doApproxRefinementChecks || !testEntailment(approximations[j], phi)) {
+                  approximations[j] = if (it is True) phi else And(it, phi)
+                }
+              }
             }
           }
           candidateModels.removeFirst()
-        } else { // Not interpolant exists
-          // DECIDE: In case we do not find an interpolant with the conflict rule, we have to
-          // back-propagate the dangerous states:
-          // If <M, i+1> for 0 <= i < N is a candidate model and there is a subset \hat{x}_0 of x_0
-          // and constants c_0 such that
-          // M, \hat{x}_0 = c_0 \models \mathcal{T}[R_i[x_0 / V]], then add the candidate model
+        } else { // No interpolant exists
+          // DECIDE: No interpolant, so back-propagate the dangerous states:
+          // Candidate model <M, i+1> for 0 <= i < N, then subset \hat{x}_0 of x_0 and constants c_0
+          // s. t. M, \hat{x}_0 = c_0 \models \mathcal{T}[R_i[x_0 / V]], then add candidate model
           // <\hat{x} = c_0, i> (renaming \hat{x}_0 to variables \hat{x} in V)
-          val test = And(model, step)
-          val result = SMTSolver().solve(test)
+          val result = SMTSolver().solve(And(step, model))
           if (result.status == SatStatus.SAT) {
             val relevantAssignments =
                 result.model
                     .filter { (k, _) -> k.endsWith("0") }
                     .mapKeys { (k, _) -> k.removeSuffix("0") }
-            // TODO: Does it suffice to use a subset of the assignments?
             candidateModels.add(0, Pair(relevantAssignments.toFormula(), i - 1))
             out.println("DECIDE: Back-propagating to level ${i - 1}: $relevantAssignments")
+            if (verbose) out.println("-- Candidate models: $candidateModels")
+          } else {
+            return VerificationResult.Crash(
+                "Could not find proof or counterexample.${if (booleanEvaluation) " Could be because of booleanEvaluation." else ""}")
           }
         }
       }
@@ -175,37 +216,80 @@ class GPDR(
     transitionSystem.vars.forEach {
       if (!this.containsKey(it)) map[it] = "0"
     } // Add missing variables as 0
-    return map.map {
-          when (it.key) {
-            "M_", "M" -> it.value.toArrayFormula()
-            else -> Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
+    val memoryMapM = map.filter { it.key == "M" }.map { it.value.toArrayFormula() }.getOrNull(0)
+    val memoryMapM_ = map.filter { it.key == "M_" }.map { it.value.toArrayFormula() }.getOrNull(0)
+    val memoryMap = memoryMapM ?: memoryMapM_ ?: emptyMap()
+
+    return map.filter { it.key != "M" && it.key != "M_" }
+        .map {
+          if (it.key == "loc") {
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
+          } else if (memoryMap[it.value.toInt()] != null) {
+            And(
+                Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0),
+                memoryMap[it.value.toInt()] ?: True)
+          } else {
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
           }
         }
         .reduceOrDefault(True) { acc, next -> And(acc, next) }
   }
 
-  private fun String.toArrayFormula(): BooleanExpression {
-    val regex = """\(asConst \d+\)""".toRegex()
-    val match = regex.matchEntire(this)
-    val number = match?.value?.removePrefix("(asConst ")?.removeSuffix(")")?.toInt() ?: 0
+  private fun String.toArrayFormula(): Map<Int, BooleanExpression> {
+    val mapping = mutableMapOf<Int, Int>()
+    val constantRegex = """\(asConst \d+\)""".toRegex()
+    val storeRegex = """\(store\s+\((.*?)\)\s+(\d+)\s+(\d+)\)""".toRegex()
+    var constantMatch: MatchResult? = null
+    var arrayString = this
+    while (true) {
+      constantMatch = constantRegex.matchEntire(arrayString)
+      if (constantMatch != null) break
+      val m = storeRegex.matchEntire(arrayString)
+      mapping[m?.groups?.get(2)?.value?.toInt() as Int] = m.groups[3]?.value?.toInt()!!
+      arrayString = "(" + m.groups[1]?.value + ")"
+    }
+    val constantNumber = constantMatch.value.removePrefix("(asConst ").removeSuffix(")").toInt()
     val memorySize =
         context.scope.symbols
             .map { it.value.size }
             .reduceOrDefault(0) { acc, next -> acc + next } // size of memory M
-    return (0 until memorySize)
-        .map {
-          Eq(
-              ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
-              NumericLiteral(number.toBigInteger()),
-              0)
-        }
-        .reduceOrDefault(True) { acc, next -> And(acc, next) }
+    return (0 until memorySize).associateWith {
+      Eq(
+          ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
+          NumericLiteral(mapping[it]?.toBigInteger() ?: constantNumber.toBigInteger()),
+          0)
+    }
   }
 
-  private fun testEntailment(left: BooleanExpression, right: BooleanExpression): Boolean {
-    val result =
-        SMTSolver(booleanEvaluation).solve(Entailment(left, right, "Entailment test").smtTest())
+  private fun testEntailment(
+      left: BooleanExpression,
+      right: BooleanExpression,
+      booleanEvaluation: Boolean = this.booleanEvaluation
+  ): Boolean {
+    val leftSide = if (booleanEvaluation) And(left, booleanEvaluationConstraint) else left
+    val result = SMTSolver().solve(Entailment(leftSide, right, "Entailment test").smtTest())
     return result.status == SatStatus.UNSAT
+  }
+
+  private fun computeInterpolant(
+      left: BooleanExpression,
+      right: BooleanExpression,
+      booleanEvaluation: Boolean = this.booleanEvaluation
+  ): BooleanExpression? {
+    val leftSide =
+        if (!booleanEvaluation) left
+        else
+            And(
+                left,
+                And(
+                    booleanEvaluationConstraint.renameVariables(
+                        listOf("M").associateWith { it }), // NamedArrays, not AnyArray
+                    booleanEvaluationConstraintStep))
+    return SMTSolver()
+        .computeInterpolant(
+            leftSide,
+            right.renameVariables(listOf("M").associateWith { it }),
+            booleanEvaluation = true)
   }
 
   private fun F(
@@ -216,11 +300,15 @@ class GPDR(
   private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression {
     // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
     return Or(
-        initial,
+        initial.renameVariables(listOf("M").associateWith { it }),
         And(
             R.renameVariables(vars.plus("loc").plus("M").associateWith { "${it}0" }),
             transitionSystem.transitions.renameVariables(
                 vars.plus("loc").plus("M").associateWith { "${it}0" } +
-                    vars.plus("loc").plus("M").map { "${it}'" }.associateWith { it.removeSuffix("'") })))
+                    vars
+                        .plus("loc")
+                        .plus("M")
+                        .map { "${it}'" }
+                        .associateWith { it.removeSuffix("'") })))
   }
 }

@@ -35,12 +35,10 @@ import tools.aqua.wvm.language.True
 /**
  * SMT Solver wrapper using the Konstraints library.
  *
- * @param booleanEvaluation If true, all variables (except memory and "loc") are considered boolean,
- *   i.e. equal to 0 or 1.
  * @param wpcMode If true, the solver is used in the WPC proof system mode, which restricts certain
  *   operations. NOT SURE IF THIS IS NECESSARY ANYMORE (LEGACY).
  */
-class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = false) {
+class SMTSolver(val wpcMode: Boolean = false) {
 
   val memArray = "M_"
 
@@ -164,9 +162,10 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
               throw Exception("Unkown UserDeclaredExpression $expr")
             }
         is ArraySelect ->
-            ValAtAddr(ArrayRead(
-                asExpression(expr.array) as ArrayExpression,
-                asExpression(expr.index) as ArithmeticExpression))
+            ValAtAddr(
+                ArrayRead(
+                    asExpression(expr.array) as ArrayExpression,
+                    asExpression(expr.index) as ArithmeticExpression))
         is ArrayStore ->
             ArrayWrite(
                 asExpression(expr.array) as ArrayExpression,
@@ -256,28 +255,7 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
             }
             .reduceOrDefault(False) { exp1, exp2 -> Or(exp1, exp2) }
     val konstraint = tools.aqua.konstraints.theories.And(expr, asKonstraint(Not(oldModels)))
-    val commands = (vars.values + Assert(konstraint)).toMutableList()
-    if (booleanEvaluation) {
-      // Add to konstraint that all variables but the memory and "loc" are boolean, i.e. equal to 0
-      // or 1
-      val booleanVars =
-          vars.keys
-              .filter { vars[it]?.sort !is ArraySort && it != "loc" }
-              .map {
-                Or(
-                    Eq(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger()), 0),
-                    Eq(ValAtAddr(Variable(it)), NumericLiteral(1.toBigInteger()), 0))
-              }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val locConstraint =
-          vars.keys
-              .filter { it == "loc" } // Only if loc is present
-              .map { Gte(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger())) }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val booleanVarsKonstraint = asKonstraint(And(booleanVars, locConstraint))
-      commands += Assert(booleanVarsKonstraint)
-    }
-    commands += CheckSat
+    val commands = (vars.values + Assert(konstraint) + CheckSat).toMutableList()
     val smtProgram = DefaultSMTProgram(commands, ctx)
     var model = emptyMap<String, String>()
     smtProgram.solve().also { numberOfSolveCalls++ }
@@ -291,10 +269,8 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
               (it.name.toString() to it.term.toString())
             } ?: emptyMap()
         seenModels.addLast(model)
-        // println(model)
       } catch (ex: Exception) {
-        // todo: produce some output
-        println("oops.: $ex")
+        throw RuntimeException("Error while getting model from Z3.", ex)
       }
     }
     return Result(smtProgram.status, model)
@@ -318,7 +294,11 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
    * exprA implies the interpolant and the interpolant is unsatisfiable with exprB. A => I and I & B
    * is unsat.
    */
-  fun computeInterpolant(exprA: BooleanExpression, exprB: BooleanExpression): BooleanExpression? {
+  fun computeInterpolant(
+      exprA: BooleanExpression,
+      exprB: BooleanExpression,
+      booleanEvaluation: Boolean = false
+  ): BooleanExpression? {
     if (booleanEvaluation) { // Boolean Variables: Does not work for every theory
       return computeBooleanTheoryInterpolant(exprA, exprB)
     }
@@ -339,43 +319,41 @@ class SMTSolver(val booleanEvaluation: Boolean = false, val wpcMode: Boolean = f
     // Usually exprB is the model looking like a == 1 & b == 0 & c == 1 ...
     // Use subsets of the model to find a smaller interpolant
     val modelParts = mutableListOf<BooleanExpression>()
-    var m = exprB
-    while (m is And) {
-      modelParts.add(m.right)
-      m = m.left
-    }
-    modelParts.add(m)
+    collectConjuncts(exprB, modelParts)
     // Generate power set of modelParts, each as a single BooleanExpression connected with And
     val powerSet =
         (1 until (1 shl modelParts.size)).map { mask ->
           val subset = modelParts.filterIndexed { idx, _ -> (mask and (1 shl idx)) != 0 }
           subset.reduce { acc, exp -> And(acc, exp) }
         }
-    // Add to konstraint that all variables but the memory and "loc" are boolean, i.e. equal to 0 or
-    // 1
-    val booleanVars =
-        vars.keys
-            .filter { it != "M_" && it != "loc" }
-            .map {
-              Or(
-                  Eq(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger()), 0),
-                  Eq(ValAtAddr(Variable(it)), NumericLiteral(1.toBigInteger()), 0))
-            }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) }
-    val booleanVarsKonstraint = asKonstraint(booleanVars)
     for (part in powerSet) {
       val konstraint = asKonstraint(exprA) // Also registers variables in vars
       val phi = asKonstraint(part)
       // M \models \phi by construction
-      // Test a \models \not\phi
-      val commands =
-          vars.values + Assert(konstraint) + Assert(booleanVarsKonstraint) + Assert(phi) + CheckSat
+      // Test a \models \not\phi = a \and \phi unsat
+      val commands = vars.values + Assert(konstraint) + Assert(phi) + CheckSat
       val smtProgram = DefaultSMTProgram(commands, ctx)
       smtProgram.solve().also { numberOfSolveCalls++ }
       if (smtProgram.status == SatStatus.UNSAT) {
         return Not(asExpression(phi) as BooleanExpression)
-      }
+      } /*else { // Debugging info
+          println("Interpolant candidate ${Not(part)} is not an interpolant.")
+            val c = vars.values + Assert(konstraint) + Assert(booleanVarsKonstraint) + Assert(phi) + CheckSat + GetModel
+              val smtProg = DefaultSMTProgram(c, ctx)
+              smtProg.solve().also { numberOfSolveCalls++ }
+              println("Counter model: ${smtProg.model}")
+        }*/
     }
     return null
+  }
+
+  fun collectConjuncts(e: BooleanExpression, acc: MutableList<BooleanExpression>) {
+    when (e) {
+      is And -> {
+        collectConjuncts(e.left, acc)
+        collectConjuncts(e.right, acc)
+      }
+      else -> acc.add(e)
+    }
   }
 }
