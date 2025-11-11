@@ -29,7 +29,8 @@ class TransitionSystem(
 ) {
   // Possible system states s\in S_{V,\mu}
   val vars: MutableList<String> =
-      context.scope.symbols.map { it.key } as MutableList<String> // V //Also: loc and memory M
+      context.scope.symbols.map { it.key } as MutableList<String> // V //Also: loc and memory
+  val memorySize = context.scope.symbols.map { it.value.size }.sum()
 
   var initial: BooleanExpression = True // all vars are zero // I
   var transitions: BooleanExpression = True // transition relation //\Gamma
@@ -173,6 +174,7 @@ class TransitionSystem(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
             prepareOnMemory(this.cond),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0), // Memory does not change
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) })
@@ -183,6 +185,7 @@ class TransitionSystem(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
             Not(prepareOnMemory(this.cond)),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) })
@@ -200,20 +203,22 @@ class TransitionSystem(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
             prepareOnMemory(this.head), // boolean condition
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
-            if (useWhileInvariant) this.invariant else True)
+            if (useWhileInvariant) prepareOnMemory(this.invariant) else True)
     val loopBody = this.body.asTransition(locId).changeLocation(locId.id, startId)
     val whileFalseTransition =
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral(startId.toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral(locId.id.toBigInteger()), 0),
             Not(prepareOnMemory(this.head)),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
-            if (useWhileInvariant) this.invariant else True)
+            if (useWhileInvariant) prepareOnMemory(this.invariant) else True)
     return combineMultipleTransitions(whileTrueTransition, loopBody, whileFalseTransition)
   }
 
@@ -285,6 +290,7 @@ class TransitionSystem(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
             prepareOnMemory(this.cond),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) }),
@@ -292,6 +298,7 @@ class TransitionSystem(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
             Not(prepareOnMemory(this.cond)),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) }))
@@ -342,6 +349,7 @@ class TransitionSystem(
     return makeSingleTransition( // -1 indicates the error location
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
+        Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
         vars
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
