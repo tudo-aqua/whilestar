@@ -30,10 +30,10 @@ sealed class VerificationResult {
 
   override fun toString(): String {
     return when (this) {
-        is Proof -> "Proof"
-        is Counterexample -> "Counterexample"
-        is NoResult -> "NoResult"
-        is Crash -> "Crash"
+      is Proof -> "Proof"
+      is Counterexample -> "Counterexample"
+      is NoResult -> "NoResult"
+      is Crash -> "Crash"
     }
   }
 

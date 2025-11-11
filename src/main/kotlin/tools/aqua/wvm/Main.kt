@@ -63,7 +63,8 @@ class While : CliktCommand() {
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
-  private val warmup: Boolean by option("--warmup", help = "For measuring without any operation").flag()
+  private val warmup: Boolean by
+      option("--warmup", help = "For measuring without any operation").flag()
 
   private val filename: String by argument(help = "source file to interpret")
 
