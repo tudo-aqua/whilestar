@@ -22,7 +22,7 @@ import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 
-class TransitionSystem(
+open class TransitionSystem(
     val context: Context,
     val verbose: Boolean = false,
     val useWhileInvariant: Boolean = true
@@ -312,6 +312,7 @@ class TransitionSystem(
         vars
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
+    // return False // TODO: Does this work?
   }
 
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {

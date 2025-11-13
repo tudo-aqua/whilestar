@@ -25,6 +25,7 @@ import tools.aqua.wvm.analysis.VerificationApproach
 import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.hoare.Entailment
 import tools.aqua.wvm.analysis.hoare.SMTSolver
+import tools.aqua.wvm.language.Add
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.AnyArray
 import tools.aqua.wvm.language.ArrayRead
@@ -42,18 +43,22 @@ import tools.aqua.wvm.language.Variable
 import tools.aqua.wvm.language.renameVariables
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
+import java.math.BigInteger
 
 class GPDR(
     override val context: Context,
     override val out: Output = Output(),
     override val verbose: Boolean = false,
     val booleanEvaluation: Boolean = false,
+    val useArrayTransitionSystem: Boolean = true,
     val doApproxRefinementChecks: Boolean = false,
     val bound: Int = 100
 ) : VerificationApproach {
-  override val name: String = "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""}"
-  val transitionSystem = TransitionSystem(context, verbose)
+  override val name: String = "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""} ${if (!useArrayTransitionSystem) " (No Arrays)" else ""}"
+  val transitionSystem: TransitionSystem = if (useArrayTransitionSystem) TransitionSystem(context, verbose) else  TransitionSystemNoArrays(context, verbose)
 
+  // TODO: Maybe remove print statements, as they do nothing, but make the proof harder.
+  // TODO: Weird bug with both arrays and pointer. Especially pointers. Not value for the pointer possible (interpolants) even though it should be.
   // TODO: Test if initial is satisfiable at all
   val initial = transitionSystem.initial
   var safety = transitionSystem.invariant // Safety property S
@@ -65,10 +70,10 @@ class GPDR(
                 Gte(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger())),
                 Lt(
                     ValAtAddr(Variable(it)),
-                    NumericLiteral(transitionSystem.memorySize.toBigInteger())))
+                    NumericLiteral((if (useArrayTransitionSystem) transitionSystem.memorySize else 2).toBigInteger())))
           }
           .reduceOrDefault(True) { acc, next -> And(acc, next) }
-  val booleanMemoryConstraint: BooleanExpression =
+  val booleanMemoryConstraint: BooleanExpression = if (useArrayTransitionSystem) {
       (0..transitionSystem.memorySize - 1)
           .map {
             And(
@@ -79,7 +84,7 @@ class GPDR(
                     ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
                     NumericLiteral(1.toBigInteger())))
           }
-          .reduceOrDefault(True) { acc, next -> And(acc, next) }
+          .reduceOrDefault(True) { acc, next -> And(acc, next) }} else True
   val locConstraint = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
   val booleanEvaluationConstraint =
       And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
@@ -152,6 +157,7 @@ class GPDR(
                   }
             }
           }
+            continue
         }
       }
       // CANDIDATE: Search for model that we can use as a basis for finding an interpolant:
@@ -226,12 +232,14 @@ class GPDR(
           if (it.key == "loc") {
             Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
           } else if (memoryMap[it.value.toInt()] != null) {
+              val size = context.scope.symbols[it.key]?.size ?: 1
             And(
                 Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0),
+                (0 until (context.scope.symbols[it.key]?.size ?: 1)).map { offset ->
                 Eq(
-                    ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
-                    NumericLiteral(memoryMap[it.value.toInt()]!!.toBigInteger()),
-                    0))
+                    ValAtAddr(ArrayRead(AnyArray, if (offset > 0) Add(ValAtAddr(Variable(it.key)), NumericLiteral(offset.toBigInteger())) else ValAtAddr(Variable(it.key)))),
+                    NumericLiteral(memoryMap[it.value.toInt() + offset]?.toBigInteger() ?: BigInteger.ZERO),
+                    0)}. reduceOrDefault(True) { acc, next -> And(acc, next) })
             // Note: Changing this to have the variable, not the index improved performance
           } else {
             Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
