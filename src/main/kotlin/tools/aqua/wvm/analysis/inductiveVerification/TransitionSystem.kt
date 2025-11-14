@@ -127,7 +127,8 @@ open class TransitionSystem(
         is Mul -> Mul(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
         is Div -> Div(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
         is Rem -> Rem(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
-        is VarAddress -> throw Exception("expression ($expr) not supported by proof system.")
+        is VarAddress -> ValAtAddr(expr.variable)
+        else -> throw Exception("expression ($expr) not supported by proof system.")
       }
 
   private fun prepareOnMemory(expr: BooleanExpression): BooleanExpression =
@@ -308,7 +309,7 @@ open class TransitionSystem(
 
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
     if (skipPrints)
-        return False // TODO: Does this work? // Skip print statements in the transition system as
+        return False // Skip print statements in the transition system as
     // they do not affect program state
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),

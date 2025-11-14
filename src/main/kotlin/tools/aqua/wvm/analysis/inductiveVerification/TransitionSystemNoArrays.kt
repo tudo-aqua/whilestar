@@ -25,8 +25,9 @@ import tools.aqua.wvm.machine.Context
 class TransitionSystemNoArrays(
     context: Context,
     verbose: Boolean = false,
-    useWhileInvariant: Boolean = true
-) : TransitionSystem(context, verbose, useWhileInvariant) {
+    useWhileInvariant: Boolean = true,
+    skipPrints: Boolean = true
+) : TransitionSystem(context, verbose, useWhileInvariant, skipPrints) {
   init {
     if (verbose) println("Variables: $vars")
     // Initial condition: All variables are zero and the location is 0 and precondition holds
@@ -167,6 +168,7 @@ class TransitionSystemNoArrays(
   }
 
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
+    if (skipPrints) return False
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
