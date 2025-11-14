@@ -30,6 +30,7 @@ import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
 import tools.aqua.wvm.analysis.inductiveVerification.GPDR
 import tools.aqua.wvm.analysis.inductiveVerification.KInductionChecker
+import tools.aqua.wvm.analysis.inductiveVerification.KInductionCheckerWithBMC
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
 import tools.aqua.wvm.language.SequenceOfStatements
 import tools.aqua.wvm.machine.Output
@@ -118,7 +119,18 @@ class While : CliktCommand() {
         println("=============================================")
       }
 
-      if (bmc) {
+      if (bmc && kInd) {
+        println("======= Running BMC with k-induction =======")
+        val out = Output()
+        val bmcKIndChecker = KInductionCheckerWithBMC(context, out, verbose)
+        val result = bmcKIndChecker.check()
+        println("# Safe: $result")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
+        println("=============================================")
+      }
+
+      if (bmc && !kInd) {
         println("=========== Running BMC checker: ===========")
         val out = Output()
         val bmcChecker = BMCSafetyChecker(context, out, verbose)
@@ -129,7 +141,7 @@ class While : CliktCommand() {
         println("=============================================")
       }
 
-      if (kInd) {
+      if (kInd && !bmc) {
         println("======== Running k-induction checker: =======")
         val out = Output()
         val kIndChecker = KInductionChecker(context, out, verbose)
