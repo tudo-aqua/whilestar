@@ -59,6 +59,7 @@ class GPDR(
     val booleanEvaluation: Boolean = false,
     val useArrayTransitionSystem: Boolean = true,
     val doApproxRefinementChecks: Boolean = false,
+    val doInitialSatisfiableTest: Boolean = false,
     val bound: Int = 100
 ) : VerificationApproach {
   override val name: String =
@@ -67,7 +68,6 @@ class GPDR(
       if (useArrayTransitionSystem) TransitionSystem(context, verbose)
       else TransitionSystemNoArrays(context, verbose)
 
-  // TODO: Test if initial is satisfiable at all
   val initial = transitionSystem.initial
   var safety = transitionSystem.invariant // Safety property S
 
@@ -133,8 +133,11 @@ class GPDR(
     var N = 0
     var iteration = 0
     out.println("INITIALIZE: ε || [N = 0, R_0 = I]")
-    // TODO: Make sure the initial is actually reachable/satisfiable
-
+    // Test initial satisfiability
+    if (doInitialSatisfiableTest && testEntailment(booleanEvaluationConstraint, True)) {
+      out.println("System is vacuously VALID (initial state unsatisfiable).")
+      return VerificationResult.Proof("System is vacuously VALID.", "Initial state unsatisfiable.")
+    }
     while (iteration < bound) {
       if (verbose) out.println("--- Current Approximations")
       for (i in 0..N) {
@@ -147,7 +150,7 @@ class GPDR(
       // TODO: Should it test all previous approximations?
       if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
         out.println("System is VALID R_${N-1} models R_${N-2}.")
-        return VerificationResult.Proof("System is VALID.")
+        return VerificationResult.Proof("System is VALID.", "R_${N-2} models R_${N-1}")
       }
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
       if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
