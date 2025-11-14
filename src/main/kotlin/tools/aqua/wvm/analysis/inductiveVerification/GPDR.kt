@@ -57,8 +57,6 @@ class GPDR(
   override val name: String = "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""} ${if (!useArrayTransitionSystem) " (No Arrays)" else ""}"
   val transitionSystem: TransitionSystem = if (useArrayTransitionSystem) TransitionSystem(context, verbose) else  TransitionSystemNoArrays(context, verbose)
 
-  // TODO: Maybe remove print statements, as they do nothing, but make the proof harder.
-  // TODO: Weird bug with both arrays and pointer. Especially pointers. Not value for the pointer possible (interpolants) even though it should be.
   // TODO: Test if initial is satisfiable at all
   val initial = transitionSystem.initial
   var safety = transitionSystem.invariant // Safety property S

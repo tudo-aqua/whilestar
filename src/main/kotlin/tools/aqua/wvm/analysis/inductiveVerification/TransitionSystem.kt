@@ -25,7 +25,8 @@ import tools.aqua.wvm.machine.Context
 open class TransitionSystem(
     val context: Context,
     val verbose: Boolean = false,
-    val useWhileInvariant: Boolean = true
+    val useWhileInvariant: Boolean = true,
+    val skipPrints: Boolean = true
 ) {
   // Possible system states s\in S_{V,\mu}
   val vars: MutableList<String> =
@@ -305,14 +306,14 @@ open class TransitionSystem(
   }
 
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
-    return makeSingleTransition(
+      if (skipPrints) return False // TODO: Does this work? // Skip print statements in the transition system as they do not affect program state
+      return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
         Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
         vars
             .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
-    // return False // TODO: Does this work?
   }
 
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {
