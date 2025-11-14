@@ -340,7 +340,7 @@ data class Fail(val message: String) : Statement {
               output = "Fail with message: $message",
               dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
 
-  override fun toIndentedString(indent: String) = "fail \"$message\"\n"
+  override fun toIndentedString(indent: String) = "fail \"$message\";\n"
 }
 
 data class SequenceOfStatements(val statements: List<Statement> = emptyList()) :
@@ -361,3 +361,16 @@ data class SequenceOfStatements(val statements: List<Statement> = emptyList()) :
 }
 
 fun concat(seq1: List<Statement>, seq2: List<Statement>) = SequenceOfStatements(seq1 + seq2)
+
+fun Statement.toDataflowString() : String {
+    var dataflowString = when (this) {
+        is While ->  this.head.toString()
+        is IfThenElse -> this.cond.toString()
+        is Print ->  "print " + this.values.toString()
+        is Fail -> "fail"
+
+        else -> this.toIndentedString("")
+    }
+    dataflowString = dataflowString.replace("\"", "#quot;").replace("\n", "").replace(";", "")
+    return dataflowString
+}

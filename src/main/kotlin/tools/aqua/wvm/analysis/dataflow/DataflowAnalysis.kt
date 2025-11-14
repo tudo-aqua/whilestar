@@ -103,7 +103,7 @@ data class DataflowAnalysis<F : Fact>(
                         else marking[n]!!.first)
                   }
                 }
-          } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
+    } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
       val outFacts =
           when (node.stmt) {
             is IfThenElse ->

@@ -61,7 +61,7 @@ data class SimpleCFG(val node: CFGNode<*>) : CFG {
   }
 }
 
-data class CFGEdge(val from: CFGNode<*>, val to: CFGNode<*>)
+data class CFGEdge(val from: CFGNode<*>, val to: CFGNode<*>, val label:String? = null)
 
 data class ComplexCFG(
     val nodes: List<CFGNode<*>>,
@@ -94,7 +94,9 @@ private fun compose(first: CFG, second: List<CFG>): CFG {
       first.edges() +
           second.flatMap { it.edges() } +
           first.final().flatMap { f ->
-            second.filter { it !is EmptyCFG }.flatMap { s -> s.initial().map { CFGEdge(f, it) } }
+            second.filter { it !is EmptyCFG }.flatMap { s -> s.initial().map {
+                val label = if(f.stmt is While) "false" else null
+                CFGEdge(f, it, label) } }
           }
   val final =
       second.flatMap { it.final() } +
@@ -104,17 +106,27 @@ private fun compose(first: CFG, second: List<CFG>): CFG {
 
 fun cfg(stmt: Statement): CFG =
     when (stmt) {
-      is IfThenElse ->
-          compose(
-              SimpleCFG(CFGNode(stmt)),
-              listOf(cfg(stmt.thenBlock.statements), cfg(stmt.elseBlock.statements)))
+      is IfThenElse -> {
+          val ifNode = CFGNode(stmt)
+          val thenBlock = cfg(stmt.thenBlock.statements)
+          val elseBlock = cfg(stmt.elseBlock.statements)
+          val final = (if(thenBlock is EmptyCFG) listOf(ifNode) else thenBlock.final() +
+                  if(elseBlock is EmptyCFG) listOf(ifNode) else elseBlock.final())
+          ComplexCFG(
+              thenBlock.nodes() + elseBlock.nodes() + listOf(ifNode),
+              thenBlock.edges() + elseBlock.edges() +
+                thenBlock.initial().map { CFGEdge(ifNode, it, "true") } +
+                elseBlock.initial().map { CFGEdge(ifNode, it, "false") },
+              listOf(ifNode),
+              final)
+      }
       is While -> {
         val whileNode = CFGNode(stmt)
         val whileBody = cfg(stmt.body.statements)
         ComplexCFG(
             whileBody.nodes() + listOf(whileNode),
             whileBody.edges() +
-                whileBody.initial().map { CFGEdge(whileNode, it) } +
+                whileBody.initial().map { CFGEdge(whileNode, it, "true") } +
                 whileBody.final().map { CFGEdge(it, whileNode) },
             listOf(whileNode),
             listOf(whileNode))
@@ -128,44 +140,40 @@ fun cfg(seq: List<Statement>): CFG =
 fun cfgToMermaid(cfg: CFG): String {
   val nodes = cfg.nodes()
   val edges = cfg.edges()
+  val initial = cfg.initial()
+  val final = cfg.final()
 
   return buildString {
     appendLine("graph TD")
 
     for ((index, node) in nodes.withIndex()) {
-      var nodeLabel = node.stmt.toIndentedString("")
-      when (node.stmt) {
-        is While -> nodeLabel = node.stmt.head.toString()
-        is IfThenElse -> nodeLabel = nodeLabel.substringBefore("{")
-        else -> {}
-      }
 
-      nodeLabel = nodeLabel.replace("\"", "#quot;")
-      nodeLabel = nodeLabel.replace("\n", "")
-      appendLine("$index[\"$index &#91${nodeLabel}&#93\"]")
+      appendLine("$index[\"$index &#91${node.stmt.toDataflowString()}&#93\"]")
+    }
+    for (edge in edges) {
+        val edgeLabel = edge.label?.let { "--" + edge.label + "-->"} ?: "-->"
+        appendLine("${nodes.indexOf(edge.from)} $edgeLabel ${nodes.indexOf(edge.to)}")
     }
 
-    for (edge in edges) {
+    for (init in initial) {
+        appendLine("s${initial.indexOf(init)}((#160;))")
+        appendLine("s${initial.indexOf(init)} --> ${nodes.indexOf(init)}")
+    }
 
-      when (edge.from.stmt) {
-        is While ->
-            if (edge.from.stmt.body.head() == edge.to.stmt) {
-              appendLine("${nodes.indexOf(edge.from)} --true--> ${nodes.indexOf(edge.to)}")
-            } else {
-              appendLine("${nodes.indexOf(edge.from)} --false--> ${nodes.indexOf(edge.to)}")
-            }
-        is IfThenElse ->
-            if (edge.from.stmt.thenBlock.statements.first() == edge.to.stmt) {
-              appendLine("${nodes.indexOf(edge.from)} --true--> ${nodes.indexOf(edge.to)}")
-            } else {
-              appendLine("${nodes.indexOf(edge.from)} --false--> ${nodes.indexOf(edge.to)}")
-            }
-        else -> appendLine("${nodes.indexOf(edge.from)} --> ${nodes.indexOf(edge.to)}")
-      }
+
+    for (finalNode in final) {
+        appendLine("e${final.indexOf(finalNode)}(((#160;)))")
+        appendLine("${nodes.indexOf(finalNode)} --> e${final.indexOf(finalNode)}")
+
     }
 
     for ((index, node) in nodes.withIndex()) {
-      appendLine("click $index call nodeClick(\"$index\")")
+      val tooltip = node.stmt.toIndentedString("")
+          .replace("\"", "#34;")
+          .replace("<", "#60;")
+          .replace(">", "#62;")
+          .replace("\n", "")
+      appendLine("click $index call nodeClick(\"$index\") \"$tooltip\"")
     }
   }
 }

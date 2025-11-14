@@ -27,13 +27,22 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
       is NumericLiteral -> emptySet()
       is Add -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Sub -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Rem -> varsInExpr(expr.left) - varsInExpr(expr.right)
+      is Mul -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Div -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Gt -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Lt -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Gte -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Lte -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Eq -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is And -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Or -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Imply -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Equiv -> varsInExpr(expr.left) + varsInExpr(expr.right)
+      is Not -> varsInExpr(expr.negated)
       is BooleanExpression ->
-          error("This Boolean expression is not supported yet $expr ${expr::class}") // TODO!!!
-      else -> error("Unsupported expression for dataflow analysis: $expr")
+          error("This Boolean expression is not supported yet $expr ${expr::class}")
+      else -> error("Unsupported expression for dataflow analysis: $expr ${expr::class}")
     }
 
 fun varsInStmt(stmt: Statement): Set<String> =
