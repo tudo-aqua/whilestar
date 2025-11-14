@@ -55,7 +55,6 @@ open class TransitionSystem(
     if (verbose) println("Transition relation: $transitions")
 
     // Invariant: (Not at error location) and (Either not at the end or the postcondition holds)
-    // TODO: Maybe change this to have a property that is checked every step as well (with a flag)
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
     // As a convention, error locations are labeled with negative numbers, more precisely in this
     // implementation there is only one error location, labeled "-1"
@@ -84,8 +83,8 @@ open class TransitionSystem(
                         NumericLiteral(0.toBigInteger()),
                         0))
             it.value.size > 1 ->
-                listOf( // array initialized to 0 TODO: Maybe change this to variable instead of
-                    // index notation as well.
+                listOf( // array initialized to 0
+                    // TODO: Maybe change this to variable instead of index notation as well.
                     Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
                     Eq(
                         ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
@@ -128,7 +127,6 @@ open class TransitionSystem(
         is Div -> Div(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
         is Rem -> Rem(prepareOnMemory(expr.left), prepareOnMemory(expr.right))
         is VarAddress -> ValAtAddr(expr.variable)
-        else -> throw Exception("expression ($expr) not supported by proof system.")
       }
 
   private fun prepareOnMemory(expr: BooleanExpression): BooleanExpression =
@@ -385,7 +383,7 @@ open class TransitionSystem(
       is And -> And(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Or -> Or(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Not -> Not(negated.changeLocation(currentId, newId))
-      else -> this // Other expressions are not handled here TODO: Are more necessary?
+      else -> throw IllegalArgumentException("Unsupported BooleanExpression type for changeLocation")
     }
   }
 

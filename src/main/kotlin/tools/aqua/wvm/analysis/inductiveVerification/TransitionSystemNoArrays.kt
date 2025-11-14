@@ -44,7 +44,6 @@ class TransitionSystemNoArrays(
     if (verbose) println("Transition relation: $transitions")
 
     // Invariant: (Not at error location) and (Either not at the end or the postcondition holds)
-    // TODO: Maybe change this to have a property that is checked every step as well (with a flag)
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
     // As a convention, error locations are labeled with negative numbers, more precisely in this
     // implementation there is only one error location, labeled "-1"
@@ -221,7 +220,7 @@ class TransitionSystemNoArrays(
       is And -> And(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Or -> Or(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Not -> Not(negated.changeLocation(currentId, newId))
-      else -> this // Other expressions are not handled here TODO: Are more necessary?
+      else -> throw IllegalArgumentException("Unsupported BooleanExpression type for changeLocation")
     }
   }
 }

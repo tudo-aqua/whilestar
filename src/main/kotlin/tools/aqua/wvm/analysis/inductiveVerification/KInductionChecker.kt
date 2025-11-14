@@ -51,7 +51,7 @@ class KInductionChecker(
     try {
       for (k in 1..kBound) {
         out.println("=== K-Induction with k = $k ===")
-        // 0. Depth check TODO: Should the normal one even have a depth check too?
+        // 0. Depth check (Might not even be necessary for "normal" BMC)
         val depthCheckTransitions =
             (2..k)
                 .map { transitionSystem.numberedTransitions(it - 2, it - 1) }
