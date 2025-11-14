@@ -166,6 +166,7 @@ class TransitionSystemNoArrays(
                 .reduceOrDefault(True) { acc, next -> And(acc, next) }))
   }
 
+  @Suppress("UnusedReceiverParameter")
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
     if (skipPrints) return False
     return makeSingleTransition(
@@ -188,6 +189,7 @@ class TransitionSystemNoArrays(
             .reduceOrDefault(True) { acc, next -> And(acc, next) })
   }
 
+  @Suppress("UnusedReceiverParameter")
   private fun Fail.asTransition(locId: LocationID): BooleanExpression {
     return makeSingleTransition( // -1 indicates the error location
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),

@@ -225,7 +225,7 @@ class GPDR(
           // Candidate model <M, i+1> for 0 <= i < N, then subset \hat{x}_0 of x_0 and constants c_0
           // s. t. M, \hat{x}_0 = c_0 \models \mathcal{T}[R_i[x_0 / V]], then add candidate model
           // <\hat{x} = c_0, i> (renaming \hat{x}_0 to variables \hat{x} in V)
-          val result = SMTSolver().solve(And(step, model.renameVariables(listOf("M").associateWith { it }),))
+          val result = SMTSolver().solve(And(step, model.renameVariables(listOf("M").associateWith { it })))
           if (result.status == SatStatus.SAT) {
             val relevantAssignments =
                 result.model
