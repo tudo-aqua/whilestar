@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.inductiveVerification
 
+import java.math.BigInteger
 import kotlin.toBigInteger
 import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.konstraints.util.reduceOrDefault
@@ -29,11 +30,11 @@ import tools.aqua.wvm.language.Add
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.AnyArray
 import tools.aqua.wvm.language.ArrayRead
+import tools.aqua.wvm.language.BasicType
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Eq
 import tools.aqua.wvm.language.Gte
 import tools.aqua.wvm.language.Lt
-import tools.aqua.wvm.language.Lte
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.NumericLiteral
 import tools.aqua.wvm.language.Or
@@ -43,8 +44,14 @@ import tools.aqua.wvm.language.Variable
 import tools.aqua.wvm.language.renameVariables
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
-import java.math.BigInteger
 
+/**
+ * GPDR verification approach. Cases: booleanEvaluation = true/false, useArrayTransitionSystem =
+ * true/false
+ * - useArrayTransitionSystem = false: No arrays, all variables are directly modelled. Arrays and
+ *   Pointers NOT POSSIBLE! (No way to model them)
+ * - booleanEvaluation = true: Variables and pointers restrained to memory size.
+ */
 class GPDR(
     override val context: Context,
     override val out: Output = Output(),
@@ -54,35 +61,53 @@ class GPDR(
     val doApproxRefinementChecks: Boolean = false,
     val bound: Int = 100
 ) : VerificationApproach {
-  override val name: String = "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""} ${if (!useArrayTransitionSystem) " (No Arrays)" else ""}"
-  val transitionSystem: TransitionSystem = if (useArrayTransitionSystem) TransitionSystem(context, verbose) else  TransitionSystemNoArrays(context, verbose)
+  override val name: String =
+      "GPDR${if (booleanEvaluation) " (Boolean Evaluation)" else ""} ${if (!useArrayTransitionSystem) " (No Arrays)" else ""}"
+  val transitionSystem: TransitionSystem =
+      if (useArrayTransitionSystem) TransitionSystem(context, verbose)
+      else TransitionSystemNoArrays(context, verbose)
 
   // TODO: Test if initial is satisfiable at all
   val initial = transitionSystem.initial
   var safety = transitionSystem.invariant // Safety property S
 
   val booleanVariableConstraint: BooleanExpression =
-      transitionSystem.vars
+      transitionSystem.context.scope.symbols
           .map {
-            And(
-                Gte(ValAtAddr(Variable(it)), NumericLiteral(0.toBigInteger())),
-                Lt(
-                    ValAtAddr(Variable(it)),
-                    NumericLiteral((if (useArrayTransitionSystem) transitionSystem.memorySize else 2).toBigInteger())))
+            listOf(
+                    Gte(
+                        ValAtAddr(Variable(it.key)),
+                        NumericLiteral(
+                            0.toBigInteger())), // May be fixed for "normal" integer variables
+                    Lt(
+                        ValAtAddr(Variable(it.key)),
+                        NumericLiteral(
+                            (if (useArrayTransitionSystem) transitionSystem.memorySize else 2)
+                                .toBigInteger())),
+                    if (useArrayTransitionSystem &&
+                        booleanEvaluation &&
+                        it.value.type == BasicType.INT)
+                        Lt( // Constrain normal variables to be boolean,
+                            ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
+                            NumericLiteral(2.toBigInteger()))
+                    else True)
+                .reduceOrDefault(True) { acc, next -> And(acc, next) }
           }
           .reduceOrDefault(True) { acc, next -> And(acc, next) }
-  val booleanMemoryConstraint: BooleanExpression = if (useArrayTransitionSystem) {
-      (0..transitionSystem.memorySize - 1)
-          .map {
-            And(
-                Gte(
-                    ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
-                    NumericLiteral(0.toBigInteger())),
-                Lte(
-                    ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
-                    NumericLiteral(1.toBigInteger())))
-          }
-          .reduceOrDefault(True) { acc, next -> And(acc, next) }} else True
+  val booleanMemoryConstraint: BooleanExpression =
+      if (useArrayTransitionSystem) {
+        (0..transitionSystem.memorySize - 1)
+            .map {
+              And(
+                  Gte(
+                      ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
+                      NumericLiteral(0.toBigInteger())),
+                  Lt(
+                      ValAtAddr(ArrayRead(AnyArray, NumericLiteral(it.toBigInteger()))),
+                      NumericLiteral(transitionSystem.memorySize.toBigInteger())))
+            }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) }
+      } else True
   val locConstraint = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
   val booleanEvaluationConstraint =
       And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
@@ -155,7 +180,7 @@ class GPDR(
                   }
             }
           }
-            continue
+          continue
         }
       }
       // CANDIDATE: Search for model that we can use as a basis for finding an interpolant:
@@ -230,14 +255,26 @@ class GPDR(
           if (it.key == "loc") {
             Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
           } else if (memoryMap[it.value.toInt()] != null) {
-              val size = context.scope.symbols[it.key]?.size ?: 1
+            val size = context.scope.symbols[it.key]?.size ?: 1
             And(
                 Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0),
-                (0 until (context.scope.symbols[it.key]?.size ?: 1)).map { offset ->
-                Eq(
-                    ValAtAddr(ArrayRead(AnyArray, if (offset > 0) Add(ValAtAddr(Variable(it.key)), NumericLiteral(offset.toBigInteger())) else ValAtAddr(Variable(it.key)))),
-                    NumericLiteral(memoryMap[it.value.toInt() + offset]?.toBigInteger() ?: BigInteger.ZERO),
-                    0)}. reduceOrDefault(True) { acc, next -> And(acc, next) })
+                (0 until (context.scope.symbols[it.key]?.size ?: 1))
+                    .map { offset ->
+                      Eq(
+                          ValAtAddr(
+                              ArrayRead(
+                                  AnyArray,
+                                  if (offset > 0)
+                                      Add(
+                                          ValAtAddr(Variable(it.key)),
+                                          NumericLiteral(offset.toBigInteger()))
+                                  else ValAtAddr(Variable(it.key)))),
+                          NumericLiteral(
+                              memoryMap[it.value.toInt() + offset]?.toBigInteger()
+                                  ?: BigInteger.ZERO),
+                          0)
+                    }
+                    .reduceOrDefault(True) { acc, next -> And(acc, next) })
             // Note: Changing this to have the variable, not the index improved performance
           } else {
             Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
