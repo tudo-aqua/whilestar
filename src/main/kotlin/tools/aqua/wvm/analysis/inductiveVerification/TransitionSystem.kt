@@ -84,7 +84,8 @@ open class TransitionSystem(
                         NumericLiteral(0.toBigInteger()),
                         0))
             it.value.size > 1 ->
-                listOf( // array initialized to 0 TODO: Maybe change this to variable instead of index notation as well.
+                listOf( // array initialized to 0 TODO: Maybe change this to variable instead of
+                    // index notation as well.
                     Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
                     Eq(
                         ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
@@ -306,8 +307,10 @@ open class TransitionSystem(
   }
 
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
-      if (skipPrints) return False // TODO: Does this work? // Skip print statements in the transition system as they do not affect program state
-      return makeSingleTransition(
+    if (skipPrints)
+        return False // TODO: Does this work? // Skip print statements in the transition system as
+    // they do not affect program state
+    return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
         Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
