@@ -297,10 +297,10 @@ class SMTSolver(val wpcMode: Boolean = false) {
   fun computeInterpolant(
       exprA: BooleanExpression,
       exprB: BooleanExpression,
-      booleanEvaluation: Boolean = false
+      subModelInterpolant: Boolean = false
   ): BooleanExpression? {
-    if (booleanEvaluation) { // Boolean Variables: Does not work for every theory
-      return computeBooleanTheoryInterpolant(exprA, exprB)
+    if (subModelInterpolant) { // Boolean Variables: Does not work for every theory
+      return computeSubModelInterpolant(exprA, exprB)
     }
     // Standard way: Use the interpolation feature of the Konstraints library
     val konstraintA = asKonstraint(exprA) // Also registers variables in vars
@@ -312,7 +312,7 @@ class SMTSolver(val wpcMode: Boolean = false) {
     return if (interpolants?.size == 1) asExpression(interpolants[0]) as BooleanExpression else null
   }
 
-  fun computeBooleanTheoryInterpolant(
+  fun computeSubModelInterpolant(
       exprA: BooleanExpression,
       exprB: BooleanExpression
   ): BooleanExpression? {

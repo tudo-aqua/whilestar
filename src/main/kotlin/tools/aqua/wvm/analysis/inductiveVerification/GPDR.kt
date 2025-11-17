@@ -60,9 +60,10 @@ class GPDR(
     override val out: Output = Output(),
     override val verbose: Boolean = false,
     val booleanEvaluation: Boolean = false,
-    val useArrayTransitionSystem: Boolean = true,
+    val useArrayTransitionSystem: Boolean = false,
     val doApproxRefinementChecks: Boolean = false,
     val doInitialSatisfiableTest: Boolean = false,
+    val subModelInterpolant: Boolean = false,
     val bound: Int = 100
 ) : VerificationApproach {
   override val name: String =
@@ -113,7 +114,9 @@ class GPDR(
       } else True
   val locConstraint = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
   val booleanEvaluationConstraint =
-      And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
+      if (booleanEvaluation)
+          And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
+      else locConstraint
   val booleanEvaluationConstraintStep =
       booleanEvaluationConstraint.renameVariables(
           transitionSystem.vars.plus("loc").plus("M").associateWith { "${it}0" })
@@ -127,8 +130,9 @@ class GPDR(
   // {predicateTransform(R_i)} \subseteq {R_{i+1}}
 
   override fun check(): VerificationResult {
-    if (verbose) println("Transitions: ${transitionSystem.transitions}")
-    if (verbose) println("Invariant: $safety")
+    out.println("Name: $name")
+    if (verbose) out.println("Transitions: ${transitionSystem.transitions}")
+    if (verbose) out.println("Invariant: $safety")
     // INITIALIZE
     val candidateModels: MutableList<Pair<BooleanExpression, Int>> = mutableListOf()
     val approximations: MutableList<BooleanExpression> =
@@ -323,10 +327,9 @@ class GPDR(
   private fun computeInterpolant(
       left: BooleanExpression,
       right: BooleanExpression,
-      booleanEvaluation: Boolean = this.booleanEvaluation
   ): BooleanExpression? {
     val leftSide =
-        if (!booleanEvaluation) left
+        if (!this.booleanEvaluation) left
         else
             And(
                 left,
@@ -338,7 +341,7 @@ class GPDR(
         .computeInterpolant(
             leftSide,
             right.renameVariables(listOf("M").associateWith { it }),
-            booleanEvaluation = true)
+            subModelInterpolant = this.subModelInterpolant)
   }
 
   private fun F(
