@@ -51,7 +51,9 @@ import tools.aqua.wvm.machine.Output
  * - useArrayTransitionSystem = false: No arrays, all variables are directly modelled. Arrays and
  *   Pointers NOT POSSIBLE! (No way to model them)
  * - booleanEvaluation = true: Variables and pointers restrained to memory size.
- * TODO: Very weird edge-case: two consecutive prints, in a safe program, cause running infinitely. Look at pointer/ex1.w
+ *
+ * TODO: Very weird edge-case: two consecutive prints, in a safe program, cause running infinitely.
+ *   Look at pointer/ex1.w
  */
 class GPDR(
     override val context: Context,
@@ -225,7 +227,8 @@ class GPDR(
           // Candidate model <M, i+1> for 0 <= i < N, then subset \hat{x}_0 of x_0 and constants c_0
           // s. t. M, \hat{x}_0 = c_0 \models \mathcal{T}[R_i[x_0 / V]], then add candidate model
           // <\hat{x} = c_0, i> (renaming \hat{x}_0 to variables \hat{x} in V)
-          val result = SMTSolver().solve(And(step, model.renameVariables(listOf("M").associateWith { it })))
+          val result =
+              SMTSolver().solve(And(step, model.renameVariables(listOf("M").associateWith { it })))
           if (result.status == SatStatus.SAT) {
             val relevantAssignments =
                 result.model
@@ -259,7 +262,6 @@ class GPDR(
           if (it.key == "loc") {
             Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0)
           } else if (memoryMap[it.value.toInt()] != null) {
-            val size = context.scope.symbols[it.key]?.size ?: 1
             And(
                 Eq(ValAtAddr(Variable(it.key)), NumericLiteral(it.value.toBigInteger()), 0),
                 (0 until (context.scope.symbols[it.key]?.size ?: 1))
@@ -291,7 +293,7 @@ class GPDR(
     val mapping = mutableMapOf<Int, Int>()
     val constantRegex = """\(asConst \d+\)""".toRegex()
     val storeRegex = """\(store\s+\((.*?)\)\s+(\d+)\s+(\d+)\)""".toRegex()
-    var constantMatch: MatchResult? = null
+    var constantMatch: MatchResult?
     var arrayString = this
     while (true) {
       constantMatch = constantRegex.matchEntire(arrayString)
