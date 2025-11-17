@@ -27,8 +27,10 @@ class TransitionSystemNoArrays(
     verbose: Boolean = false,
     useWhileInvariant: Boolean = true,
     skipPrints: Boolean = true
-) : TransitionSystem(context, verbose, useWhileInvariant, skipPrints) {
+) : TransitionSystem(context, false, useWhileInvariant, skipPrints) {
   init {
+    val locId = LocationID(0)
+
     if (verbose) println("Variables: $vars")
     // Initial condition: All variables are zero and the location is 0 and precondition holds
     initial = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
@@ -222,7 +224,8 @@ class TransitionSystemNoArrays(
       is And -> And(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Or -> Or(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Not -> Not(negated.changeLocation(currentId, newId))
-      else -> throw IllegalArgumentException("Unsupported BooleanExpression type for changeLocation")
+      else -> this // Other expressions do not contain location information
+    // throw IllegalArgumentException("Unsupported BooleanExpression type for changeLocation")
     }
   }
 }

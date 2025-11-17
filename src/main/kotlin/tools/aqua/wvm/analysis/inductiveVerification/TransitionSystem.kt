@@ -307,8 +307,7 @@ open class TransitionSystem(
 
   @Suppress("UnusedReceiverParameter")
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
-    if (skipPrints)
-        return False // Skip print statements in the transition system as
+    if (skipPrints) return False // Skip print statements in the transition system as
     // they do not affect program state
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
@@ -385,7 +384,8 @@ open class TransitionSystem(
       is And -> And(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Or -> Or(left.changeLocation(currentId, newId), right.changeLocation(currentId, newId))
       is Not -> Not(negated.changeLocation(currentId, newId))
-      else -> throw IllegalArgumentException("Unsupported BooleanExpression type for changeLocation")
+      else -> this // Other expressions do not contain location information
+    // throw IllegalArgumentException("Unsupported BooleanExpression type for changeLocation")
     }
   }
 
