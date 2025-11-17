@@ -27,7 +27,7 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
       is NumericLiteral -> emptySet()
       is Add -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Sub -> varsInExpr(expr.left) + varsInExpr(expr.right)
-      is Rem -> varsInExpr(expr.left) - varsInExpr(expr.right)
+      is Rem -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Mul -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Div -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Gt -> varsInExpr(expr.left) + varsInExpr(expr.right)
