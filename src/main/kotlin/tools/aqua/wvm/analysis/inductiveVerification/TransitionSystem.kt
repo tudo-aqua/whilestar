@@ -36,6 +36,7 @@ open class TransitionSystem(
   var initial: BooleanExpression = True // all vars are zero // I
   var transitions: BooleanExpression = True // transition relation //\Gamma
   var invariant: BooleanExpression = True
+  var numLocations: Int = 0
 
   data class LocationID(var id: Int)
 
@@ -61,6 +62,7 @@ open class TransitionSystem(
     val notError = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
     invariant = And(notError, Or(Not(atEnd), prepareOnMemory(context.post)))
     if (verbose) println("Invariant: $invariant")
+    numLocations = locId.id+1
   }
 
   private fun initMemory(): BooleanExpression {

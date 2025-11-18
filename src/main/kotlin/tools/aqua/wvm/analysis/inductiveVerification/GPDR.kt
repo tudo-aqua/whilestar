@@ -33,6 +33,7 @@ import tools.aqua.wvm.language.ArrayRead
 import tools.aqua.wvm.language.BasicType
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Eq
+import tools.aqua.wvm.language.False
 import tools.aqua.wvm.language.Gte
 import tools.aqua.wvm.language.Lt
 import tools.aqua.wvm.language.Not
@@ -112,11 +113,13 @@ class GPDR(
             }
             .reduceOrDefault(True) { acc, next -> And(acc, next) }
       } else True
-  val locConstraint = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
+  val locConstraint = And(
+      Gte(ValAtAddr(Variable("loc")), NumericLiteral((-1).toBigInteger())),
+      Lt(ValAtAddr(Variable("loc")), NumericLiteral(transitionSystem.numLocations.toBigInteger())))
   val booleanEvaluationConstraint =
       if (booleanEvaluation)
           And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
-      else locConstraint
+      else True
   val booleanEvaluationConstraintStep =
       booleanEvaluationConstraint.renameVariables(
           transitionSystem.vars.plus("loc").plus("M").associateWith { "${it}0" })
@@ -141,7 +144,7 @@ class GPDR(
     var iteration = 0
     out.println("INITIALIZE: ε || [N = 0, R_0 = I]")
     // Test initial satisfiability
-    if (doInitialSatisfiableTest && testEntailment(booleanEvaluationConstraint, True)) {
+    if (doInitialSatisfiableTest && testEntailment(initial, False)) {
       out.println("System is vacuously VALID (initial state unsatisfiable).")
       return VerificationResult.Proof("System is vacuously VALID.", "Initial state unsatisfiable.")
     }
@@ -167,7 +170,7 @@ class GPDR(
       }
       // UNFOLD: We look one step ahead as soon as we are sure that the system is safe for N steps:
       // if R_N \models S, then N := N + 1 and R_N := True
-      if (testEntailment(And(approximations[N], booleanEvaluationConstraint), safety)) {
+      if (testEntailment(approximations[N], safety)) {
         out.println("UNFOLD: System is ${N}-safe, increasing bound.")
         approximations.add(if (booleanEvaluation) booleanEvaluationConstraint else True)
         N += 1
@@ -345,16 +348,16 @@ class GPDR(
   }
 
   private fun F(
-      R: BooleanExpression,
+      approximation: BooleanExpression,
       vars: List<String> = transitionSystem.vars
-  ): BooleanExpression = predicateTransform(R, vars)
+  ): BooleanExpression = predicateTransform(approximation, vars)
 
-  private fun predicateTransform(R: BooleanExpression, vars: List<String>): BooleanExpression {
-    // \mathcal{F}(R)(V) := ∃x_0. I ∨ (R[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
+  private fun predicateTransform(approximation: BooleanExpression, vars: List<String>): BooleanExpression {
+    // \mathcal{F}(approximation)(V) := ∃x_0. I ∨ (approximation[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
     return Or(
         initial.renameVariables(listOf("M").associateWith { it }),
         And(
-            R.renameVariables(vars.plus("loc").plus("M").associateWith { "${it}0" }),
+            approximation.renameVariables(vars.plus("loc").plus("M").associateWith { "${it}0" }),
             transitionSystem.transitions.renameVariables(
                 vars.plus("loc").plus("M").associateWith { "${it}0" } +
                     vars
