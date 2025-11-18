@@ -57,6 +57,18 @@ class While : CliktCommand() {
 
   private val gpdr: Boolean by option("-g", "--gpdr", help = "run gpdr checker").flag()
 
+  private val gpdrSubModelInterpolants: Boolean by
+      option("--gpdr-smi", help = "enable sub-model interpolation for gpdr").flag()
+
+  private val gpdrUseArrayTransitionSystem: Boolean by
+      option("--gpdr-ats", help = "use array transition system for gpdr").flag()
+
+  private val gpdrInitialSatTest: Boolean by
+      option("--gpdr-ist", help = "enable initial satisfiability test for gpdr").flag()
+
+  private val gpdrApproximationRefinementChecks: Boolean by
+        option("--gpdr-arc", help = "enable approximation refinement checks for gpdr").flag()
+
   // TODO: Make sure this is properly implemented throughout the codebase
   private val booleanEvaluation: Boolean by
       option("-B", "--boolean-eval", help = "enable boolean evaluation for gpdr").flag()
@@ -155,12 +167,24 @@ class While : CliktCommand() {
       if (gpdr) {
         println("=========== Running GPDR checker: ===========")
         val out = Output()
-        val gpdrChecker = GPDR(context, out, verbose, booleanEvaluation)
+        val gpdrChecker = GPDR(context, out, verbose,
+          booleanEvaluation,
+          gpdrUseArrayTransitionSystem,
+          gpdrApproximationRefinementChecks,
+          gpdrInitialSatTest,
+          gpdrSubModelInterpolants)
         val result = gpdrChecker.check()
         println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
         println("=============================================")
+      } else {
+        if (gpdrSubModelInterpolants ||
+            gpdrUseArrayTransitionSystem ||
+            gpdrInitialSatTest ||
+            gpdrApproximationRefinementChecks) {
+          println("WARNING: GPDR sub-options were provided but GPDR checker was not enabled.")
+        }
       }
 
       if (run) {
