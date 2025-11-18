@@ -4,4 +4,4 @@ vars:
 pre: (x = 0)
 code:
   x := x;
-post: (x = 0)
+post: (x = 1)

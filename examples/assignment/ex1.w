@@ -6,4 +6,4 @@ code:
   print "x = ", x;
   x := 11;
   print "x = ", x;
-post: (true)
+post: (x = 11)

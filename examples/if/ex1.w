@@ -8,4 +8,4 @@ code:
   } else {
     print "Bigger or equal 100", x;
   };
-post: (true)
+post: (x < 100)

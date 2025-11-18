@@ -172,7 +172,8 @@ class While : CliktCommand() {
           gpdrUseArrayTransitionSystem,
           gpdrApproximationRefinementChecks,
           gpdrInitialSatTest,
-          gpdrSubModelInterpolants)
+          gpdrSubModelInterpolants,
+          bound = 1000)
         val result = gpdrChecker.check()
         println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
