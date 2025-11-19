@@ -370,8 +370,8 @@ class WPCProofSystem(
     return when (success) {
       true -> VerificationResult.Proof("All verification conditions were successfully proven.")
       false ->
-          VerificationResult.Counterexample(
-              "At least one verification condition could not be proven.")
+          VerificationResult.NoResult(
+              "At least one verification condition could not be proven. But might still be safe.")
     }
   }
 }

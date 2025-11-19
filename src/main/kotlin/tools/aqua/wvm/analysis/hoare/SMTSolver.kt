@@ -270,7 +270,7 @@ class SMTSolver(val wpcMode: Boolean = false) {
             } ?: emptyMap()
         seenModels.addLast(model)
       } catch (ex: Exception) {
-        throw RuntimeException("Error while getting model from Z3.", ex)
+        throw RuntimeException("Error while getting model from Z3. But was satisfiable.", ex)
       }
     }
     return Result(smtProgram.status, model)
