@@ -14,4 +14,4 @@ code:
     i := t;
     i := i % 34;
     i := (-1) * i;
-    assert (i  == -32);
+post: (i  == -32)
