@@ -62,7 +62,7 @@ open class TransitionSystem(
     val notError = Gte(ValAtAddr(Variable("loc")), NumericLiteral(0.toBigInteger()))
     invariant = And(notError, Or(Not(atEnd), prepareOnMemory(context.post)))
     if (verbose) println("Invariant: $invariant")
-    numLocations = locId.id+1
+    numLocations = locId.id + 1
   }
 
   private fun initMemory(): BooleanExpression {

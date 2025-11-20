@@ -25,6 +25,8 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
+import tools.aqua.konstraints.smt.IllegalSymbolException
+import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
@@ -67,7 +69,7 @@ class While : CliktCommand() {
       option("--gpdr-ist", help = "enable initial satisfiability test for gpdr").flag()
 
   private val gpdrApproximationRefinementChecks: Boolean by
-        option("--gpdr-arc", help = "enable approximation refinement checks for gpdr").flag()
+      option("--gpdr-arc", help = "enable approximation refinement checks for gpdr").flag()
 
   // TODO: Make sure this is properly implemented throughout the codebase
   private val booleanEvaluation: Boolean by
@@ -167,14 +169,23 @@ class While : CliktCommand() {
       if (gpdr) {
         println("=========== Running GPDR checker: ===========")
         val out = Output()
-        val gpdrChecker = GPDR(context, out, verbose,
-          booleanEvaluation,
-          gpdrUseArrayTransitionSystem,
-          gpdrApproximationRefinementChecks,
-          gpdrInitialSatTest,
-          gpdrSubModelInterpolants,
-          bound = 1000)
-        val result = gpdrChecker.check()
+        val gpdrChecker =
+            GPDR(
+                context,
+                out,
+                verbose,
+                booleanEvaluation,
+                gpdrUseArrayTransitionSystem,
+                gpdrApproximationRefinementChecks,
+                gpdrInitialSatTest,
+                gpdrSubModelInterpolants,
+                bound = 1000)
+        val result =
+            try {
+              gpdrChecker.check()
+            } catch (e: IllegalSymbolException) {
+              VerificationResult.Crash("GPDR failed due to an illegal symbol.", e)
+            }
         println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()

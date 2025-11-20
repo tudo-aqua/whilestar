@@ -113,9 +113,12 @@ class GPDR(
             }
             .reduceOrDefault(True) { acc, next -> And(acc, next) }
       } else True
-  val locConstraint = And(
-      Gte(ValAtAddr(Variable("loc")), NumericLiteral((-1).toBigInteger())),
-      Lt(ValAtAddr(Variable("loc")), NumericLiteral(transitionSystem.numLocations.toBigInteger())))
+  val locConstraint =
+      And(
+          Gte(ValAtAddr(Variable("loc")), NumericLiteral((-1).toBigInteger())),
+          Lt(
+              ValAtAddr(Variable("loc")),
+              NumericLiteral(transitionSystem.numLocations.toBigInteger())))
   val booleanEvaluationConstraint =
       if (booleanEvaluation)
           And(And(booleanVariableConstraint, booleanMemoryConstraint), locConstraint)
@@ -352,7 +355,10 @@ class GPDR(
       vars: List<String> = transitionSystem.vars
   ): BooleanExpression = predicateTransform(approximation, vars)
 
-  private fun predicateTransform(approximation: BooleanExpression, vars: List<String>): BooleanExpression {
+  private fun predicateTransform(
+      approximation: BooleanExpression,
+      vars: List<String>
+  ): BooleanExpression {
     // \mathcal{F}(approximation)(V) := ∃x_0. I ∨ (approximation[x_0 / V] ∧ \Gamma[x_0 / V][V / V′])
     return Or(
         initial.renameVariables(listOf("M").associateWith { it }),
