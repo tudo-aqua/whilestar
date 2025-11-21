@@ -229,4 +229,4 @@ class While : CliktCommand() {
 }
 
 fun main(args: Array<String>) = While().main(args)
-//fun main(args: Array<String>) = While().main(listOf("-gB", "examples/gpdr-examples/ex1.w"))
+// fun main(args: Array<String>) = While().main(listOf("-gB", "examples/gpdr-examples/ex1.w"))
