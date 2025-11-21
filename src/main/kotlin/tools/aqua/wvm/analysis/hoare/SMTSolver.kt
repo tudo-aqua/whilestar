@@ -106,7 +106,9 @@ class SMTSolver(val wpcMode: Boolean = false) {
           as Expression<IntSort>
     } else if (!this.wpcMode) {
       throw IllegalSymbolException("SMT Solver cannot compute with address expression ${expr}")
-    } else throw IllegalSymbolException("WPC Proof System cannot compute with address expression ${expr}")
+    } else
+        throw IllegalSymbolException(
+            "WPC Proof System cannot compute with address expression ${expr}")
   }
 
   fun asKonstraint(expr: ArithmeticExpression): Expression<IntSort> =

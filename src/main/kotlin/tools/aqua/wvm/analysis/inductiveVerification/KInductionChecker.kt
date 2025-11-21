@@ -149,101 +149,107 @@ class KInductionCheckerWithBMC(
   val transitionSystem = TransitionSystem(context, verbose)
 
   override fun check(): VerificationResult {
-    // Start with BMC 0:
-    out.println("=== BMC 0 ===")
-    val bmc0 = And(transitionSystem.zeroedInitial(), Not(transitionSystem.numberedInvariant(0)))
-    if (verbose) out.println("SMT test for BMC 0: $bmc0")
-    val bmc0Result = SMTSolver().solve(bmc0)
-    when (bmc0Result.status) {
-      SatStatus.UNSAT -> out.println("BMC 0 passed.")
-      SatStatus.SAT -> {
-        out.println(
-            "BMC 0 failed. 0-safety does not hold. Counterexample: ${bmc0Result.model.toSortedMap()}")
-        return Counterexample("BMC 0 failed. 0-safety does not hold.", bmc0Result.model.toString())
-      }
-      SatStatus.UNKNOWN -> {
-        out.println("BMC 0 could not be decided.")
-        return Crash("BMC: 0-safety could not be decided.")
-      }
-      SatStatus.PENDING -> {
-        out.println("Error during SMT solving of BMC 0.")
-        return Crash("BMC: 0-safety exited with an error during solving.")
-      }
-    }
-
-    // ----------------------------------------
-
-    var test: BooleanExpression = True
-
-    for (k in 1..kBound) {
-      out.println("=== K-Induction with BMC, k = $k ===")
-      test =
-          And(
-              test,
-              And(
-                  transitionSystem.numberedTransitions(k - 1, k),
-                  transitionSystem.numberedInvariant(k - 1)))
-      val property = transitionSystem.numberedInvariant(k)
-      // BMC-k and also already k-induction basis for k+1
-      val basis = And(test, And(transitionSystem.zeroedInitial(), Not(property)))
-      if (verbose) out.println("SMT test for BMC-$k / $k-induction basis: $basis")
-      var result = SMTSolver().solve(basis)
-      when (result.status) {
-        SatStatus.UNSAT -> out.println("BMC-$k / $k-induction basis passed.")
+    try {
+      // Start with BMC 0:
+      out.println("=== BMC 0 ===")
+      val bmc0 = And(transitionSystem.zeroedInitial(), Not(transitionSystem.numberedInvariant(0)))
+      if (verbose) out.println("SMT test for BMC 0: $bmc0")
+      val bmc0Result = SMTSolver().solve(bmc0)
+      when (bmc0Result.status) {
+        SatStatus.UNSAT -> out.println("BMC 0 passed.")
         SatStatus.SAT -> {
-          out.println("BMC-$k failed. Counterexample: ${result.model.toSortedMap()}")
-          return Counterexample("BMC-$k failed.", result.model.toString())
+          out.println(
+              "BMC 0 failed. 0-safety does not hold. Counterexample: ${bmc0Result.model.toSortedMap()}")
+          return Counterexample(
+              "BMC 0 failed. 0-safety does not hold.", bmc0Result.model.toString())
         }
         SatStatus.UNKNOWN -> {
-          out.println("BMC / $k-induction basis could not be decided.")
-          return Crash("BMC / $k-induction basis at k = $k could not be decided.")
+          out.println("BMC 0 could not be decided.")
+          return Crash("BMC: 0-safety could not be decided.")
         }
         SatStatus.PENDING -> {
-          out.println("Error during SMT solving of BMC / $k-induction basis.")
-          return Crash("BMC / $k-induction basis at k = $k exited with an error during solving.")
+          out.println("Error during SMT solving of BMC 0.")
+          return Crash("BMC: 0-safety exited with an error during solving.")
         }
       }
 
-      // Depth check for (k+1)-induction step
-      result = SMTSolver().solve(test)
-      when (result.status) {
-        SatStatus.SAT -> out.println("Depth check passed.")
-        SatStatus.UNSAT -> {
-          out.println("Depth check failed. Program may be shorter than k = $k.")
-          return Proof("Program is exhausted before k = $k.")
-        }
-        SatStatus.UNKNOWN -> {
-          out.println("Depth check at k = $k could not be decided.")
-          return Crash("BMC: Depth check at k = $k could not be decided.")
-        }
-        SatStatus.PENDING -> {
-          out.println("Error during SMT solving of depth check at k = $k.")
-          return Crash("BMC: Depth check at k = $k exited with an error during solving.")
-        }
-      }
+      // ----------------------------------------
 
-      // k-induction step
-      val step = And(test, Not(property))
-      if (verbose) out.println("SMT test for $k-induction step: $step")
-      result = SMTSolver().solve(step)
-      when (result.status) {
-        SatStatus.UNSAT -> {
-          out.println("Inductive step passed. Program is safe by k-induction with k = $k.")
-          return Proof("Inductive step passed. Program is safe by k-induction with k = $k.")
+      var test: BooleanExpression = True
+
+      for (k in 1..kBound) {
+        out.println("=== K-Induction with BMC, k = $k ===")
+        test =
+            And(
+                test,
+                And(
+                    transitionSystem.numberedTransitions(k - 1, k),
+                    transitionSystem.numberedInvariant(k - 1)))
+        val property = transitionSystem.numberedInvariant(k)
+        // BMC-k and also already k-induction basis for k+1
+        val basis = And(test, And(transitionSystem.zeroedInitial(), Not(property)))
+        if (verbose) out.println("SMT test for BMC-$k / $k-induction basis: $basis")
+        var result = SMTSolver().solve(basis)
+        when (result.status) {
+          SatStatus.UNSAT -> out.println("BMC-$k / $k-induction basis passed.")
+          SatStatus.SAT -> {
+            out.println("BMC-$k failed. Counterexample: ${result.model.toSortedMap()}")
+            return Counterexample("BMC-$k failed.", result.model.toString())
+          }
+          SatStatus.UNKNOWN -> {
+            out.println("BMC / $k-induction basis could not be decided.")
+            return Crash("BMC / $k-induction basis at k = $k could not be decided.")
+          }
+          SatStatus.PENDING -> {
+            out.println("Error during SMT solving of BMC / $k-induction basis.")
+            return Crash("BMC / $k-induction basis at k = $k exited with an error during solving.")
+          }
         }
-        SatStatus.SAT ->
-            out.println(
-                "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${result.model.toSortedMap()}")
-        SatStatus.UNKNOWN -> {
-          out.println("Inductive step could not be decided.")
-          return Crash("K-Induction: Inductive step at k = $k could not be decided.")
+
+        // Depth check for (k+1)-induction step
+        result = SMTSolver().solve(test)
+        when (result.status) {
+          SatStatus.SAT -> out.println("Depth check passed.")
+          SatStatus.UNSAT -> {
+            out.println("Depth check failed. Program may be shorter than k = $k.")
+            return Proof("Program is exhausted before k = $k.")
+          }
+          SatStatus.UNKNOWN -> {
+            out.println("Depth check at k = $k could not be decided.")
+            return Crash("BMC: Depth check at k = $k could not be decided.")
+          }
+          SatStatus.PENDING -> {
+            out.println("Error during SMT solving of depth check at k = $k.")
+            return Crash("BMC: Depth check at k = $k exited with an error during solving.")
+          }
         }
-        SatStatus.PENDING -> {
-          out.println("Error during SMT solving of inductive step.")
-          return Crash("K-Induction: Inductive step at k = $k exited with an error during solving.")
+
+        // k-induction step
+        val step = And(test, Not(property))
+        if (verbose) out.println("SMT test for $k-induction step: $step")
+        result = SMTSolver().solve(step)
+        when (result.status) {
+          SatStatus.UNSAT -> {
+            out.println("Inductive step passed. Program is safe by k-induction with k = $k.")
+            return Proof("Inductive step passed. Program is safe by k-induction with k = $k.")
+          }
+          SatStatus.SAT ->
+              out.println(
+                  "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${result.model.toSortedMap()}")
+          SatStatus.UNKNOWN -> {
+            out.println("Inductive step could not be decided.")
+            return Crash("K-Induction: Inductive step at k = $k could not be decided.")
+          }
+          SatStatus.PENDING -> {
+            out.println("Error during SMT solving of inductive step.")
+            return Crash(
+                "K-Induction: Inductive step at k = $k exited with an error during solving.")
+          }
         }
       }
+      return NoResult("Could not prove safety up to k = $kBound.")
+    } catch (e: RuntimeException) {
+      return Crash("K-Induction with BMC Checker crashed with exception: ${e.message}", e)
     }
-    return NoResult("Could not prove safety up to k = $kBound.")
   }
 }
