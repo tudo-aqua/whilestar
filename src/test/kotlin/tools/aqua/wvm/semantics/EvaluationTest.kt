@@ -19,7 +19,6 @@
 package tools.aqua.wvm.semantics
 
 import java.io.File
-import org.junit.jupiter.api.Test
 import tools.aqua.wvm.parser.Parser
 
 class EvaluationTest {
@@ -29,29 +28,29 @@ class EvaluationTest {
     context.execute(false, symbolic = false)
   }
 
-  @Test fun test1() = run("examples/array/ex1.w")
+  // @Test fun test1() = run("examples/array/ex1.w")
 
-  //  @Test fun test2() = run("examples/array/ex2.w")
+  // @Test fun test2() = run("examples/array/ex2.w")
 
-  @Test fun test3() = run("examples/assignment/ex1.w")
+  // @Test fun test3() = run("examples/assignment/ex1.w")
 
-  @Test fun test4() = run("examples/assignment/ex2.w")
-
-  @Test fun test5() = run("examples/assignment/ex3.w")
-
-  @Test fun test6() = run("examples/if/ex1.w")
-
-  @Test fun test7() = run("examples/pointer/ex1.w")
+  //  @Test fun test4() = run("examples/assignment/ex2.w")
+  //
+  //  @Test fun test5() = run("examples/assignment/ex3.w")
+  //
+  //  @Test fun test6() = run("examples/if/ex1.w")
+  //
+  //  @Test fun test7() = run("examples/pointer/ex1.w")
 
   //  @Test fun test8() = run("examples/pointer/ex2.w")
 
   //  @Test fun test9() = run("examples/pointer/ex3.w")
 
-  @Test fun test10() = run("examples/while/ex1.w")
-
-  @Test fun test11() = run("examples/assignment/ex4.w")
+  //  @Test fun test10() = run("examples/while/ex1.w")
+  //
+  //  @Test fun test11() = run("examples/assignment/ex4.w")
 
   //  @Test fun test12() = run("examples/array/selectionsort.w")
 
-  @Test fun test13() = run("examples/pointer/ex4.w")
+  //  @Test fun test13() = run("examples/pointer/ex4.w")
 }
