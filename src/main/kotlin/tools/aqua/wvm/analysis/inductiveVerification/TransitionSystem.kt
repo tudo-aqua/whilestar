@@ -172,7 +172,7 @@ open class TransitionSystem(
 
   private fun IfThenElse.asTransition(locId: LocationID): BooleanExpression {
     val startId = locId.id
-    val ifTrueTransition =
+    var ifTrueTransition =
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
             Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
@@ -195,6 +195,7 @@ open class TransitionSystem(
     val elseBody = this.elseBlock.asTransition(locId)
     // Changing last location id from the when-branch (currently in locId) to the last location-id
     // from the else-branch
+    ifTrueTransition = ifTrueTransition.changeLocation(lastIdThenBody, locId.id)
     thenBody = thenBody.changeLocation(lastIdThenBody, locId.id)
     return combineMultipleTransitions(ifTrueTransition, thenBody, ifFalseTransition, elseBody)
   }
