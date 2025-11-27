@@ -301,8 +301,8 @@ class GPDR(
 
   private fun String.toMemoryMapping(): Map<Int, Int> {
     val mapping = mutableMapOf<Int, Int>()
-    val constantRegex = """\(asConst \d+\)""".toRegex()
-    val storeRegex = """\(store\s+\((.*?)\)\s+(\d+)\s+(\d+)\)""".toRegex()
+    val constantRegex = """\(asConst -?\d+\)""".toRegex()
+    val storeRegex = """\(store\s+\((.*?)\)\s+(\d+)\s+(-?\d+)\)""".toRegex()
     var constantMatch: MatchResult?
     var arrayString = this
     while (true) {
