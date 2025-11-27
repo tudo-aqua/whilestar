@@ -33,6 +33,7 @@ class LVFact(val varname: String, val node: CFGNode<*>) : Fact {
   override fun equals(other: Any?): Boolean = other is LVFact && other.varname == varname
 
   override fun toString(): String = varname
+
 }
 
 val LVAnalysis =

@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
+import tools.aqua.wvm.analysis.semantics.UnaryMinusOk
 import tools.aqua.wvm.language.*
 
 fun varsInExpr(expr: Expression<*>): Set<String> =
@@ -40,8 +41,7 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
       is Imply -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Equiv -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Not -> varsInExpr(expr.negated)
-      is BooleanExpression ->
-          error("This Boolean expression is not supported yet $expr ${expr::class}")
+      is UnaryMinus -> varsInExpr(expr.negated)
       else -> error("Unsupported expression for dataflow analysis: $expr ${expr::class}")
     }
 

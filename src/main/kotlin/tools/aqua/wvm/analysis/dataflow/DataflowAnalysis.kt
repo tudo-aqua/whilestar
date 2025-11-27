@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
+import main.kotlin.tools.aqua.wvm.analysis.dataflow.Reachable
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Scope
 import tools.aqua.wvm.parser.Parser
@@ -51,6 +52,9 @@ fun interface Initialization<F : Fact> {
   fun initialize(cfg: CFG, scope: Scope): Marking<F>
 }
 
+fun interface Check<F: Fact> {
+    fun check(cfg: CFG, marking: Marking<F>): String
+}
 data class DataflowAnalysis<F : Fact>(
     val direction: Direction,
     val type: AnalysisType,
@@ -70,7 +74,8 @@ data class DataflowAnalysis<F : Fact>(
     val printGen: Gen<F, Print> = Gen { emptySet() },
     val printKill: Kill<F, Print> = Kill { _, _ -> false },
     val assertionGen: Gen<F, Assertion> = Gen { emptySet() },
-    val assertionKill: Kill<F, Assertion> = Kill{ _, _ -> false}
+    val assertionKill: Kill<F, Assertion> = Kill{ _, _ -> false},
+    private val check: Check<F> = Check{_, _ -> "ERROR: Check not available for this analysis" }
 ) {
 
   fun initialize(cfg: CFG, scope: Scope): Marking<F> =
@@ -164,7 +169,24 @@ data class DataflowAnalysis<F : Fact>(
     return log.toList()
   }
 
-  // abstract fun check()
+  fun check(cfg: CFG, marking: Marking<F>) : String = check.check(cfg, marking)
+    /*
+      fun check(cfg: CFG, marking: Marking<Reachable>): String {
+          val unreachableVars : MutableList<Int> = mutableListOf()
+          var success: Boolean = true;
+          marking.forEach {cfgNode, inout ->
+            if(inout.first.isEmpty()){
+                unreachableVars.add(cfg.idOf(cfgNode))
+                if(success) success = false
+            }
+          }
+
+          if(success) {
+              return "Reachability check OK: Every statement is reachable"
+          } else {
+              return "Reachability check FAILED: The following statements are not reachable: $unreachableVars"
+          }
+      }*/
 }
 
 fun main() {
