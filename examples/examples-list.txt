@@ -38,7 +38,7 @@ sv-benchmarks-java/jbmc-regression/assert3.w SvBenchmarksJava_JbmcRegression_Ass
 sv-benchmarks-java/jbmc-regression/assert4.w SvBenchmarksJava_JbmcRegression_Assert4 true havoc,assert
 sv-benchmarks-java/jbmc-regression/assert5.w SvBenchmarksJava_JbmcRegression_Assert5 true havoc,assert
 sv-benchmarks-java/jbmc-regression/assert6.w SvBenchmarksJava_JbmcRegression_Assert6 true havoc,assert
-sv-benchmarks-java/jbmc-regression/iarith1.w SvBenchmarksJava_JbmcRegression_Iarith1 true
+sv-benchmarks-java/jbmc-regression/iarith1.w SvBenchmarksJava_JbmcRegression_Iarith1 true division
 sv-benchmarks-java/jbmc-regression/if_icmp1.w SvBenchmarksJava_JbmcRegression_IfIcmp1 true havoc,assert
 sv-benchmarks-java/jbmc-regression/ifxx1.w SvBenchmarksJava_JbmcRegression_Ifxx1 true havoc,assert
 sv-benchmarks-java/jdart-regression/array-iteration1.w SvBenchmarksJava_JdartRegression_ArrayIteration1 false array,havoc,assert
