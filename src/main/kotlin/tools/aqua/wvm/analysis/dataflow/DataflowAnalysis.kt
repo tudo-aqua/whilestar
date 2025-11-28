@@ -18,7 +18,6 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
-import main.kotlin.tools.aqua.wvm.analysis.dataflow.Reachable
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Scope
 import tools.aqua.wvm.parser.Parser
@@ -34,8 +33,11 @@ enum class AnalysisType {
 }
 
 typealias FactSet<F> = Set<F>
+
 typealias InOut<F> = Pair<FactSet<F>, FactSet<F>>
+
 typealias Marking<F> = Map<CFGNode<*>, InOut<F>>
+
 typealias AnalysisLog<F> = List<Marking<F>>
 
 interface Fact
@@ -52,9 +54,10 @@ fun interface Initialization<F : Fact> {
   fun initialize(cfg: CFG, scope: Scope): Marking<F>
 }
 
-fun interface Check<F: Fact> {
-    fun check(cfg: CFG, marking: Marking<F>): String
+fun interface Check<F : Fact> {
+  fun check(cfg: CFG, marking: Marking<F>): String
 }
+
 data class DataflowAnalysis<F : Fact>(
     val direction: Direction,
     val type: AnalysisType,
@@ -74,17 +77,13 @@ data class DataflowAnalysis<F : Fact>(
     val printGen: Gen<F, Print> = Gen { emptySet() },
     val printKill: Kill<F, Print> = Kill { _, _ -> false },
     val assertionGen: Gen<F, Assertion> = Gen { emptySet() },
-    val assertionKill: Kill<F, Assertion> = Kill{ _, _ -> false},
-    private val check: Check<F> = Check{_, _ -> "ERROR: Check not available for this analysis" }
+    val assertionKill: Kill<F, Assertion> = Kill { _, _ -> false },
+    private val check: Check<F> = Check { _, _ -> "ERROR: Check not available for this analysis" }
 ) {
 
-  fun initialize(cfg: CFG, scope: Scope): Marking<F> =
-      initialization.initialize(cfg, scope)
+  fun initialize(cfg: CFG, scope: Scope): Marking<F> = initialization.initialize(cfg, scope)
 
-  fun next(
-      cfg: CFG,
-      marking: Marking<F>
-  ): Marking<F> {
+  fun next(cfg: CFG, marking: Marking<F>): Marking<F> {
     return cfg.nodes().associateWith { node ->
       val preds = if (direction == Direction.Forward) cfg.pred(node) else cfg.succ(node)
       val inFacts: Set<F> =
@@ -108,7 +107,7 @@ data class DataflowAnalysis<F : Fact>(
                         else marking[n]!!.first)
                   }
                 }
-    } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
+          } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
       val outFacts =
           when (node.stmt) {
             is IfThenElse ->
@@ -169,24 +168,24 @@ data class DataflowAnalysis<F : Fact>(
     return log.toList()
   }
 
-  fun check(cfg: CFG, marking: Marking<F>) : String = check.check(cfg, marking)
-    /*
-      fun check(cfg: CFG, marking: Marking<Reachable>): String {
-          val unreachableVars : MutableList<Int> = mutableListOf()
-          var success: Boolean = true;
-          marking.forEach {cfgNode, inout ->
-            if(inout.first.isEmpty()){
-                unreachableVars.add(cfg.idOf(cfgNode))
-                if(success) success = false
-            }
-          }
+  fun check(cfg: CFG, marking: Marking<F>): String = check.check(cfg, marking)
+  /*
+  fun check(cfg: CFG, marking: Marking<Reachable>): String {
+      val unreachableVars : MutableList<Int> = mutableListOf()
+      var success: Boolean = true;
+      marking.forEach {cfgNode, inout ->
+        if(inout.first.isEmpty()){
+            unreachableVars.add(cfg.idOf(cfgNode))
+            if(success) success = false
+        }
+      }
 
-          if(success) {
-              return "Reachability check OK: Every statement is reachable"
-          } else {
-              return "Reachability check FAILED: The following statements are not reachable: $unreachableVars"
-          }
-      }*/
+      if(success) {
+          return "Reachability check OK: Every statement is reachable"
+      } else {
+          return "Reachability check FAILED: The following statements are not reachable: $unreachableVars"
+      }
+  }*/
 }
 
 fun main() {

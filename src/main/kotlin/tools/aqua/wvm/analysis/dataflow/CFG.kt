@@ -62,7 +62,7 @@ data class SimpleCFG(val node: CFGNode<*>) : CFG {
   }
 }
 
-data class CFGEdge(val from: CFGNode<*>, val to: CFGNode<*>, val label:String? = null)
+data class CFGEdge(val from: CFGNode<*>, val to: CFGNode<*>, val label: String? = null)
 
 data class ComplexCFG(
     val nodes: List<CFGNode<*>>,
@@ -95,9 +95,14 @@ private fun compose(first: CFG, second: List<CFG>): CFG {
       first.edges() +
           second.flatMap { it.edges() } +
           first.final().flatMap { f ->
-            second.filter { it !is EmptyCFG }.flatMap { s -> s.initial().map {
-                val label = if(f.stmt is While) "false" else null
-                CFGEdge(f, it, label) } }
+            second
+                .filter { it !is EmptyCFG }
+                .flatMap { s ->
+                  s.initial().map {
+                    val label = if (f.stmt is While) "false" else null
+                    CFGEdge(f, it, label)
+                  }
+                }
           }
   val final =
       second.flatMap { it.final() } +
@@ -108,18 +113,22 @@ private fun compose(first: CFG, second: List<CFG>): CFG {
 fun cfg(stmt: Statement): CFG =
     when (stmt) {
       is IfThenElse -> {
-          val ifNode = CFGNode(stmt)
-          val thenBlock = cfg(stmt.thenBlock.statements)
-          val elseBlock = cfg(stmt.elseBlock.statements)
-          val final = (if(thenBlock is EmptyCFG) listOf(ifNode) else thenBlock.final() +
-                  if(elseBlock is EmptyCFG) listOf(ifNode) else elseBlock.final())
-          ComplexCFG(
-              thenBlock.nodes() + elseBlock.nodes() + listOf(ifNode),
-              thenBlock.edges() + elseBlock.edges() +
+        val ifNode = CFGNode(stmt)
+        val thenBlock = cfg(stmt.thenBlock.statements)
+        val elseBlock = cfg(stmt.elseBlock.statements)
+        val final =
+            (if (thenBlock is EmptyCFG) listOf(ifNode)
+            else
+                thenBlock.final() +
+                    if (elseBlock is EmptyCFG) listOf(ifNode) else elseBlock.final())
+        ComplexCFG(
+            thenBlock.nodes() + elseBlock.nodes() + listOf(ifNode),
+            thenBlock.edges() +
+                elseBlock.edges() +
                 thenBlock.initial().map { CFGEdge(ifNode, it, "true") } +
                 elseBlock.initial().map { CFGEdge(ifNode, it, "false") },
-              listOf(ifNode),
-              final)
+            listOf(ifNode),
+            final)
       }
       is While -> {
         val whileNode = CFGNode(stmt)
@@ -138,7 +147,7 @@ fun cfg(stmt: Statement): CFG =
 fun cfg(seq: List<Statement>): CFG =
     if (seq.isEmpty()) EmptyCFG else compose(cfg(seq.first()), listOf(cfg(seq.drop(1))))
 
-fun cfgToMermaid(cfg: CFG, color: List<Int> = List(cfg.nodes().size){x -> 0}): String {
+fun cfgToMermaid(cfg: CFG, color: List<Int> = List(cfg.nodes().size) { x -> 0 }): String {
   val nodes = cfg.nodes()
   val edges = cfg.edges()
   val initial = cfg.initial()
@@ -152,9 +161,9 @@ fun cfgToMermaid(cfg: CFG, color: List<Int> = List(cfg.nodes().size){x -> 0}): S
 
     for ((index, node) in nodes.withIndex()) {
 
-    appendLine("$index[\"$index &#91${node.stmt.toDataflowString()}&#93\"]")
+      appendLine("$index[\"$index &#91${node.stmt.toDataflowString()}&#93\"]")
 
-      when(color[index]){
+      when (color[index]) {
         1 -> appendLine("class $index green")
         2 -> appendLine("class $index orange")
         3 -> appendLine("class $index red")
@@ -162,53 +171,52 @@ fun cfgToMermaid(cfg: CFG, color: List<Int> = List(cfg.nodes().size){x -> 0}): S
       }
     }
     for (edge in edges) {
-        val edgeLabel = edge.label?.let { "--" + edge.label + "-->"} ?: "-->"
-        appendLine("${nodes.indexOf(edge.from)} $edgeLabel ${nodes.indexOf(edge.to)}")
-        if(edge.from.stmt is Assertion){
-            appendLine("e${nodes.indexOf(edge.from)}(((#160;)))")
-            appendLine("${nodes.indexOf(edge.from)} --false--> e${nodes.indexOf(edge.from)}")
-        }
+      val edgeLabel = edge.label?.let { "--" + edge.label + "-->" } ?: "-->"
+      appendLine("${nodes.indexOf(edge.from)} $edgeLabel ${nodes.indexOf(edge.to)}")
+      if (edge.from.stmt is Assertion) {
+        appendLine("e${nodes.indexOf(edge.from)}(((#160;)))")
+        appendLine("${nodes.indexOf(edge.from)} --false--> e${nodes.indexOf(edge.from)}")
+      }
     }
 
     for (init in initial) {
-        appendLine("s${initial.indexOf(init)}((#160;))")
-        appendLine("s${initial.indexOf(init)} --> ${nodes.indexOf(init)}")
+      appendLine("s${initial.indexOf(init)}((#160;))")
+      appendLine("s${initial.indexOf(init)} --> ${nodes.indexOf(init)}")
     }
 
-
     for (finalNode in final) {
-        appendLine("e${final.indexOf(finalNode)}(((#160;)))")
-        appendLine("${nodes.indexOf(finalNode)} --> e${final.indexOf(finalNode)}")
-
+      appendLine("e${final.indexOf(finalNode)}(((#160;)))")
+      appendLine("${nodes.indexOf(finalNode)} --> e${final.indexOf(finalNode)}")
     }
 
     for ((index, node) in nodes.withIndex()) {
-      val tooltip = node.stmt.toIndentedString("")
-          .replace("\"", "#34;")
-          .replace("<", "#60;")
-          .replace(">", "#62;")
-          .replace("\n", "")
+      val tooltip =
+          node.stmt
+              .toIndentedString("")
+              .replace("\"", "#34;")
+              .replace("<", "#60;")
+              .replace(">", "#62;")
+              .replace("\n", "")
       appendLine("click $index call nodeClick(\"$index\") \"$tooltip\"")
     }
   }
 }
 
-fun extractColor(cfg: CFG, log: Marking<Reachable>): List<Int>{
-    var colorList: MutableList<Int> = List(log.size){0}.toMutableList()
+fun extractColor(cfg: CFG, log: Marking<Reachable>): List<Int> {
+  var colorList: MutableList<Int> = List(log.size) { 0 }.toMutableList()
 
-    log.forEach{
-        node, inout ->
-        colorList[cfg.idOf(node)] = if(inout.first.isNotEmpty()){
-            if(inout.second.isNotEmpty()){
-                1
-            } else {
-                2
-            }
+  log.forEach { node, inout ->
+    colorList[cfg.idOf(node)] =
+        if (inout.first.isNotEmpty()) {
+          if (inout.second.isNotEmpty()) {
+            1
+          } else {
+            2
+          }
         } else {
-            3
+          3
         }
+  }
 
-    }
-
-    return colorList
+  return colorList
 }

@@ -18,7 +18,6 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
-import tools.aqua.wvm.analysis.semantics.UnaryMinusOk
 import tools.aqua.wvm.language.*
 
 fun varsInExpr(expr: Expression<*>): Set<String> =
