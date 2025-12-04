@@ -25,10 +25,19 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
+import main.kotlin.tools.aqua.wvm.analysis.dataflow.ReachableAnalysis
+import tools.aqua.wvm.analysis.dataflow.CFG
+import tools.aqua.wvm.analysis.dataflow.DataflowAnalysis
+import tools.aqua.wvm.analysis.dataflow.Fact
+import tools.aqua.wvm.analysis.dataflow.LVAnalysis
+import tools.aqua.wvm.analysis.dataflow.RDAnalysis
+import tools.aqua.wvm.analysis.dataflow.TaintAnalysis
+import tools.aqua.wvm.analysis.dataflow.cfg
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
 import tools.aqua.wvm.language.SequenceOfStatements
 import tools.aqua.wvm.machine.Output
+import tools.aqua.wvm.machine.Scope
 import tools.aqua.wvm.parser.Parser
 
 class While : CliktCommand() {
@@ -38,6 +47,16 @@ class While : CliktCommand() {
   private val run: Boolean by option("-r", "--run", help = "run the code").flag()
 
   private val typecheck: Boolean by option("-t", "--typecheck", help = "run type check").flag()
+
+  private val reachability: Boolean by
+      option("-ra", "--reachability", help = "run reachability analysis").flag()
+
+  private val liveness: Boolean by option("-l", "--liveness", help = "run liveness analysis").flag()
+
+  private val reachingdefinitions: Boolean by
+      option("-rd", "--reachingdefinitions", help = "run reaching definitions analysis").flag()
+
+  private val taint: Boolean by option("-ta", "--taint", help = "run taint analysis").flag()
 
   private val proof: Boolean by
       option("-p", "--proof", help = "proof (instead of execution)").flag()
@@ -49,7 +68,13 @@ class While : CliktCommand() {
 
   override fun run() {
 
-    if (!run && !typecheck && !proof) {
+    if (!run &&
+        !typecheck &&
+        !proof &&
+        !liveness &&
+        !reachability &&
+        !reachingdefinitions &&
+        !taint) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -87,6 +112,16 @@ class While : CliktCommand() {
         wps.proof()
       }
 
+      val cfg by lazy { cfg(context.program) }
+
+      if (liveness) runAnalysis("Liveness", LVAnalysis, cfg, context.scope)
+
+      if (reachingdefinitions) runAnalysis("Reaching definitions", RDAnalysis, cfg, context.scope)
+
+      if (reachability) runAnalysis("Reachability", ReachableAnalysis, cfg, context.scope)
+
+      if (taint) runAnalysis("Taint", TaintAnalysis, cfg, context.scope)
+
       if (run) {
         val trace = context.execute(verbose)
       }
@@ -96,6 +131,19 @@ class While : CliktCommand() {
         e.printStackTrace()
       }
     }
+  }
+
+  private fun <F : Fact> runAnalysis(
+      name: String,
+      analysis: DataflowAnalysis<F>,
+      cfg: CFG,
+      scope: Scope
+  ) {
+    println("==== running $name analysis: =====")
+    val log = analysis.execute(cfg, scope)
+    val checkResult = analysis.check(cfg, log.last())
+    println(checkResult)
+    println("========================================")
   }
 }
 

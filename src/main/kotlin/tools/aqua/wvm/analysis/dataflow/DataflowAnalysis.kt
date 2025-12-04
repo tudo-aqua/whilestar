@@ -67,7 +67,7 @@ data class DataflowAnalysis<F : Fact>(
     val whileKill: Kill<F, While> = Kill { _, _ -> false },
     val assignGen: Gen<F, Assignment> = Gen { _, _ -> emptySet() },
     val assignKill: Kill<F, Assignment> = Kill { _, _ -> false },
-    val failGen: Gen<F, Fail> = Gen {_, _ -> emptySet() },
+    val failGen: Gen<F, Fail> = Gen { _, _ -> emptySet() },
     val failKill: Kill<F, Fail> = Kill { _, _ -> false },
     val havocGen: Gen<F, Havoc> = Gen { _, _ -> emptySet() },
     val havocKill: Kill<F, Havoc> = Kill { _, _ -> false },
@@ -111,7 +111,7 @@ data class DataflowAnalysis<F : Fact>(
       val outFacts =
           when (node.stmt) {
             is IfThenElse ->
-              (inFacts.filter { !ifKill.kill(it, node as CFGNode<IfThenElse>) } +
+                (inFacts.filter { !ifKill.kill(it, node as CFGNode<IfThenElse>) } +
                         ifGen.gen(node as CFGNode<IfThenElse>, marking[node]!!.first))
                     .toSet()
             is While ->

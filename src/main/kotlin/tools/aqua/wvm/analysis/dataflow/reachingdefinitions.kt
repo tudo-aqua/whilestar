@@ -22,7 +22,6 @@ import tools.aqua.wvm.language.Assignment
 import tools.aqua.wvm.language.Fail
 import tools.aqua.wvm.language.Havoc
 
-
 sealed interface RDFact : Fact {
   fun varname(): String
 }
@@ -45,8 +44,8 @@ data class RDHavocFact(val varname: String, val node: CFGNode<*>) : RDFact {
   override fun toString(): String = "($varname, havoc)"
 }
 
-fun unitialized( node: CFGNode<*>, marking: Map<CFGNode<*>, InOut<RDFact>>) =
-    marking[node]!!.first.filter { it is RDInitFact }.map{ it.varname() }.toSet()
+fun unitialized(node: CFGNode<*>, marking: Map<CFGNode<*>, InOut<RDFact>>) =
+    marking[node]!!.first.filter { it is RDInitFact }.map { it.varname() }.toSet()
 
 val RDAnalysis =
     DataflowAnalysis<RDFact>(
@@ -75,19 +74,28 @@ val RDAnalysis =
           vrs.map { RDHavocFact(it, node) }.toSet()
         },
         havocKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
-        check = Check{ cfg, marking ->
-            val unitialized = cfg.nodes().associateWith{ node -> unitialized(node, marking).intersect(when (node.stmt) {
-                is Assignment -> varsInExpr(node.stmt.expr)
-                is Fail -> emptySet()
-                is Havoc -> emptySet()
-                else -> varsInStmt(node.stmt)
-            })}
+        check =
+            Check { cfg, marking ->
+              val unitialized =
+                  cfg.nodes().associateWith { node ->
+                    unitialized(node, marking)
+                        .intersect(
+                            when (node.stmt) {
+                              is Assignment -> varsInExpr(node.stmt.expr)
+                              is Fail -> emptySet()
+                              is Havoc -> emptySet()
+                              else -> varsInStmt(node.stmt)
+                            })
+                  }
 
-            if (unitialized.none { it.value.isNotEmpty() }) {
+              if (unitialized.none { it.value.isNotEmpty() }) {
                 "Reaching definitions check OK: No uninitialized variables are read"
-            } else {
-                val rdInfo = unitialized.filter { it.value.isNotEmpty() }.map {
-                    "${cfg.idOf(it.key)} reads ${it.value.joinToString(", ")}"}.sorted()
+              } else {
+                val rdInfo =
+                    unitialized
+                        .filter { it.value.isNotEmpty() }
+                        .map { "${cfg.idOf(it.key)} reads ${it.value.joinToString(", ")}" }
+                        .sorted()
                 "Reaching definitions check FAILED: $rdInfo"
-            }
-        })
+              }
+            })

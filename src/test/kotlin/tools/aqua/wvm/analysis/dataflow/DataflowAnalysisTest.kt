@@ -64,12 +64,12 @@ code:
     println(LVAnalysis.check(cfg, marking))
   }
 
-    @Test
-    fun test02() {
-        val ctx =
-            Parser(restricted = true)
-                .parse(
-                    """
+  @Test
+  fun test02() {
+    val ctx =
+        Parser(restricted = true)
+            .parse(
+                """
 vars:
   int x;
   int y;
@@ -81,32 +81,32 @@ code:
   };
 """)
 
-        val cfg = cfg(ctx.program)
+    val cfg = cfg(ctx.program)
 
-        println(cfg)
-        println(cfg.initial())
+    println(cfg)
+    println(cfg.initial())
 
-        var marking = TaintAnalysis.initialize(cfg, ctx.scope)
-        println("Initial marking:")
-        marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
+    var marking = TaintAnalysis.initialize(cfg, ctx.scope)
+    println("Initial marking:")
+    marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
 
-        var changed: Boolean
-        var iter = 0
-        while (!TaintAnalysis.isFixedPoint(cfg, marking)) {
-            println("Iteration ${++iter}:")
-            marking = TaintAnalysis.next(cfg, marking)
-            marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
-        }
-
-        println(TaintAnalysis.check(cfg, marking))
+    var changed: Boolean
+    var iter = 0
+    while (!TaintAnalysis.isFixedPoint(cfg, marking)) {
+      println("Iteration ${++iter}:")
+      marking = TaintAnalysis.next(cfg, marking)
+      marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
     }
 
-    @Test
-    fun test03() {
-        val ctx =
-            Parser(restricted = true)
-                .parse(
-                    """
+    println(TaintAnalysis.check(cfg, marking))
+  }
+
+  @Test
+  fun test03() {
+    val ctx =
+        Parser(restricted = true)
+            .parse(
+                """
 vars:
   int x;
   int y;
@@ -122,23 +122,23 @@ code:
   y := z + k;
 """)
 
-        val cfg = cfg(ctx.program)
+    val cfg = cfg(ctx.program)
 
-        println(cfg)
-        println(cfg.initial())
+    println(cfg)
+    println(cfg.initial())
 
-        var marking = RDAnalysis.initialize(cfg, ctx.scope)
-        println("Initial marking:")
-        marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
+    var marking = RDAnalysis.initialize(cfg, ctx.scope)
+    println("Initial marking:")
+    marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
 
-        var changed: Boolean
-        var iter = 0
-        while (!RDAnalysis.isFixedPoint(cfg, marking)) {
-            println("Iteration ${++iter}:")
-            marking = RDAnalysis.next(cfg, marking)
-            marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
-        }
-
-        println(RDAnalysis.check(cfg, marking))
+    var changed: Boolean
+    var iter = 0
+    while (!RDAnalysis.isFixedPoint(cfg, marking)) {
+      println("Iteration ${++iter}:")
+      marking = RDAnalysis.next(cfg, marking)
+      marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
     }
+
+    println(RDAnalysis.check(cfg, marking))
+  }
 }
