@@ -20,7 +20,6 @@ package tools.aqua.wvm.analysis.dataflow
 
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Scope
-import tools.aqua.wvm.parser.Parser
 
 enum class Direction {
   Forward,
@@ -47,7 +46,7 @@ fun interface Kill<F : Fact, T : Statement> {
 }
 
 fun interface Gen<F : Fact, T : Statement> {
-  fun gen(node: CFGNode<T>): Set<F>
+  fun gen(node: CFGNode<T>, inflow: FactSet<F>): Set<F>
 }
 
 fun interface Initialization<F : Fact> {
@@ -62,27 +61,28 @@ data class DataflowAnalysis<F : Fact>(
     val direction: Direction,
     val type: AnalysisType,
     val initialization: Initialization<F>,
-    val ifGen: Gen<F, IfThenElse> = Gen { emptySet() },
+    val ifGen: Gen<F, IfThenElse> = Gen { _, _ -> emptySet() },
     val ifKill: Kill<F, IfThenElse> = Kill { _, _ -> false },
-    val whileGen: Gen<F, While> = Gen { emptySet() },
+    val whileGen: Gen<F, While> = Gen { _, _ -> emptySet() },
     val whileKill: Kill<F, While> = Kill { _, _ -> false },
-    val assignGen: Gen<F, Assignment> = Gen { emptySet() },
+    val assignGen: Gen<F, Assignment> = Gen { _, _ -> emptySet() },
     val assignKill: Kill<F, Assignment> = Kill { _, _ -> false },
-    val failGen: Gen<F, Fail> = Gen { emptySet() },
+    val failGen: Gen<F, Fail> = Gen {_, _ -> emptySet() },
     val failKill: Kill<F, Fail> = Kill { _, _ -> false },
-    val havocGen: Gen<F, Havoc> = Gen { emptySet() },
+    val havocGen: Gen<F, Havoc> = Gen { _, _ -> emptySet() },
     val havocKill: Kill<F, Havoc> = Kill { _, _ -> false },
-    val swapGen: Gen<F, Swap> = Gen { emptySet() },
+    val swapGen: Gen<F, Swap> = Gen { _, _ -> emptySet() },
     val swapKill: Kill<F, Swap> = Kill { _, _ -> false },
-    val printGen: Gen<F, Print> = Gen { emptySet() },
+    val printGen: Gen<F, Print> = Gen { _, _ -> emptySet() },
     val printKill: Kill<F, Print> = Kill { _, _ -> false },
-    val assertionGen: Gen<F, Assertion> = Gen { emptySet() },
+    val assertionGen: Gen<F, Assertion> = Gen { _, _ -> emptySet() },
     val assertionKill: Kill<F, Assertion> = Kill { _, _ -> false },
     private val check: Check<F> = Check { _, _ -> "ERROR: Check not available for this analysis" }
 ) {
 
   fun initialize(cfg: CFG, scope: Scope): Marking<F> = initialization.initialize(cfg, scope)
 
+  @Suppress("UNCHECKED_CAST")
   fun next(cfg: CFG, marking: Marking<F>): Marking<F> {
     return cfg.nodes().associateWith { node ->
       val preds = if (direction == Direction.Forward) cfg.pred(node) else cfg.succ(node)
@@ -111,36 +111,36 @@ data class DataflowAnalysis<F : Fact>(
       val outFacts =
           when (node.stmt) {
             is IfThenElse ->
-                (inFacts.filter { !ifKill.kill(it, node as CFGNode<IfThenElse>) } +
-                        ifGen.gen(node as CFGNode<IfThenElse>))
+              (inFacts.filter { !ifKill.kill(it, node as CFGNode<IfThenElse>) } +
+                        ifGen.gen(node as CFGNode<IfThenElse>, marking[node]!!.first))
                     .toSet()
             is While ->
                 (inFacts.filter { !whileKill.kill(it, node as CFGNode<While>) } +
-                        whileGen.gen(node as CFGNode<While>))
+                        whileGen.gen(node as CFGNode<While>, marking[node]!!.first))
                     .toSet()
             is Assignment ->
                 (inFacts.filter { !assignKill.kill(it, node as CFGNode<Assignment>) } +
-                        assignGen.gen(node as CFGNode<Assignment>))
+                        assignGen.gen(node as CFGNode<Assignment>, marking[node]!!.first))
                     .toSet()
             is Fail ->
                 (inFacts.filter { !failKill.kill(it, node as CFGNode<Fail>) } +
-                        failGen.gen(node as CFGNode<Fail>))
+                        failGen.gen(node as CFGNode<Fail>, marking[node]!!.first))
                     .toSet()
             is Havoc ->
                 (inFacts.filter { !havocKill.kill(it, node as CFGNode<Havoc>) } +
-                        havocGen.gen(node as CFGNode<Havoc>))
+                        havocGen.gen(node as CFGNode<Havoc>, marking[node]!!.first))
                     .toSet()
             is Print ->
                 (inFacts.filter { !printKill.kill(it, node as CFGNode<Print>) } +
-                        printGen.gen(node as CFGNode<Print>))
+                        printGen.gen(node as CFGNode<Print>, marking[node]!!.first))
                     .toSet()
             is Swap ->
                 (inFacts.filter { !swapKill.kill(it, node as CFGNode<Swap>) } +
-                        swapGen.gen(node as CFGNode<Swap>))
+                        swapGen.gen(node as CFGNode<Swap>, marking[node]!!.first))
                     .toSet()
             is Assertion ->
                 (inFacts.filter { !assertionKill.kill(it, node as CFGNode<Assertion>) } +
-                        assertionGen.gen(node as CFGNode<Assertion>))
+                        assertionGen.gen(node as CFGNode<Assertion>, marking[node]!!.first))
                     .toSet()
           }
 
@@ -148,7 +148,7 @@ data class DataflowAnalysis<F : Fact>(
     }
   }
 
-  fun isFixedPoint(cfg: CFG, marking: Marking<F>) =
+  fun isFixedPoint(cfg: CFG, marking: Marking<F>): Boolean =
       next(cfg, marking).all { (n, f) -> f == marking[n] }
 
   fun execute(cfg: CFG, scope: Scope): AnalysisLog<F> {
@@ -169,60 +169,4 @@ data class DataflowAnalysis<F : Fact>(
   }
 
   fun check(cfg: CFG, marking: Marking<F>): String = check.check(cfg, marking)
-  /*
-  fun check(cfg: CFG, marking: Marking<Reachable>): String {
-      val unreachableVars : MutableList<Int> = mutableListOf()
-      var success: Boolean = true;
-      marking.forEach {cfgNode, inout ->
-        if(inout.first.isEmpty()){
-            unreachableVars.add(cfg.idOf(cfgNode))
-            if(success) success = false
-        }
-      }
-
-      if(success) {
-          return "Reachability check OK: Every statement is reachable"
-      } else {
-          return "Reachability check FAILED: The following statements are not reachable: $unreachableVars"
-      }
-  }*/
-}
-
-fun main() {
-
-  val ctx =
-      Parser(restricted = true)
-          .parse(
-              """
-vars:
-  int x;
-  int y;
-  int z;
-code:
-  x := 10;
-  y := 20;
-  z := x + y;
-  extern z 1 .. 100;
-  while (x > 0)  {
-    x := x - 1;
-  };
-  y := z + k;
-""")
-
-  val cfg = cfg(ctx.program)
-
-  println(cfg)
-  println(cfg.initial())
-
-  var marking = LVAnalysis.initialize(cfg, ctx.scope)
-  println("Initial marking:")
-  marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
-
-  var changed: Boolean
-  var iter = 0
-  while (!LVAnalysis.isFixedPoint(cfg, marking)) {
-    println("Iteration ${++iter}:")
-    marking = LVAnalysis.next(cfg, marking)
-    marking.forEach { n, f -> println("${cfg.idOf(n)} : in: ${f.first},  out: ${f.second}") }
-  }
 }

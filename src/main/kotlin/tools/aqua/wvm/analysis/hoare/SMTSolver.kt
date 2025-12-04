@@ -44,6 +44,7 @@ class SMTSolver {
     vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
   }
 
+  @Suppress("UNCHECKED_CAST")
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
@@ -60,6 +61,7 @@ class SMTSolver {
         else -> throw Exception("oh no")
       }
 
+  @Suppress("UNCHECKED_CAST")
   fun asKonstraint(expr: AddressExpression): Expression<IntSort> {
     if (expr is Variable) {
       if (!vars.containsKey(expr.name)) {

@@ -18,6 +18,11 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
+import tools.aqua.wvm.language.Assignment
+import tools.aqua.wvm.language.Fail
+import tools.aqua.wvm.language.Havoc
+
+
 sealed interface RDFact : Fact {
   fun varname(): String
 }
@@ -40,30 +45,49 @@ data class RDHavocFact(val varname: String, val node: CFGNode<*>) : RDFact {
   override fun toString(): String = "($varname, havoc)"
 }
 
+fun unitialized( node: CFGNode<*>, marking: Map<CFGNode<*>, InOut<RDFact>>) =
+    marking[node]!!.first.filter { it is RDInitFact }.map{ it.varname() }.toSet()
+
 val RDAnalysis =
-    DataflowAnalysis(
+    DataflowAnalysis<RDFact>(
         direction = Direction.Forward,
         type = AnalysisType.May,
         initialization = { c, s ->
           c.nodes().associateWith { node ->
-            Pair(
+            Pair<Set<RDFact>, Set<RDFact>>(
                 if (!c.initial().contains(node)) emptySet()
                 else varsInCFG(c).map { RDInitFact(it, s.getNames().contains(it)) }.toSet(),
                 emptySet())
           }
         },
-        assignGen = { node ->
+        assignGen = { node, _ ->
           val vrs = varsInExpr(node.stmt.addr)
           vrs.map { RDWriteFact(it, node) }.toSet()
         },
-        assignKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
-        swapGen = { node ->
+        assignKill = { fact, node -> varsInExpr(node.stmt.addr).contains(fact.varname()) },
+        swapGen = { node, _ ->
           val vrs = varsInExpr(node.stmt.left) + varsInExpr(node.stmt.right)
           vrs.map { RDWriteFact(it, node) }.toSet()
         },
         swapKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
-        havocGen = { node ->
+        havocGen = { node, _ ->
           val vrs = varsInExpr(node.stmt.addr)
           vrs.map { RDHavocFact(it, node) }.toSet()
         },
-        havocKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) })
+        havocKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
+        check = Check{ cfg, marking ->
+            val unitialized = cfg.nodes().associateWith{ node -> unitialized(node, marking).intersect(when (node.stmt) {
+                is Assignment -> varsInExpr(node.stmt.expr)
+                is Fail -> emptySet()
+                is Havoc -> emptySet()
+                else -> varsInStmt(node.stmt)
+            })}
+
+            if (unitialized.none { it.value.isNotEmpty() }) {
+                "Reaching definitions check OK: No uninitialized variables are read"
+            } else {
+                val rdInfo = unitialized.filter { it.value.isNotEmpty() }.map {
+                    "${cfg.idOf(it.key)} reads ${it.value.joinToString(", ")}"}.sorted()
+                "Reaching definitions check FAILED: $rdInfo"
+            }
+        })

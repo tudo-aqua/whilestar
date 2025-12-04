@@ -42,9 +42,9 @@ val LVAnalysis =
         initialization = { c, s ->
           c.nodes().associateWith { node -> Pair(emptySet(), emptySet()) }
         },
-        assignGen = { node -> varsInExpr(node.stmt.expr).map { LVFact(it, node) }.toSet() },
-        assignKill = { fact, node -> varsInExpr(node.stmt.addr).contains(fact.varname) },
-        swapGen = { node ->
+        assignGen = { node, _ -> varsInExpr(node.stmt.expr).map { LVFact(it, node) }.toSet() },
+        assignKill = Kill<LVFact, Assignment>{ fact, node -> varsInExpr(node.stmt.addr).contains(fact.varname) },
+        swapGen = { node, _ ->
           (varsInExpr(node.stmt.left) + varsInExpr(node.stmt.right))
               .map { LVFact(it, node) }
               .toSet()
@@ -54,13 +54,16 @@ val LVAnalysis =
               varsInExpr(node.stmt.right).contains(fact.varname)
         },
         havocKill = { fact, node -> varsInExpr(node.stmt.addr).contains(fact.varname) },
-        printGen = { node ->
+        printGen = { node, _ ->
           node.stmt.values.map { varsInExpr(it) }.flatten().map { LVFact(it, node) }.toSet()
         },
-        whileGen = { node -> varsInExpr(node.stmt.head).map { LVFact(it, node) }.toSet() },
-        ifGen = { node -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
-        assertionGen = { node -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
-    )
+        whileGen = { node, _ -> varsInExpr(node.stmt.head).map { LVFact(it, node) }.toSet() },
+        ifGen = { node, _ -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
+        assertionGen = { node, _ -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
+        check = Check { cfg, marking ->
+            val live = cfg.nodes().map { "${cfg.idOf(it)}: ${marking[it]!!.first.joinToString(", ")} " }.sorted()
+            "The following variables are live at locations: ${live.joinToString("; ")}"
+        })
 
 object LVGenKill {
   fun gen(stmt: Statement): Set<String> =
