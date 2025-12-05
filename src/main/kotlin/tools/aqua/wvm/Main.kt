@@ -57,7 +57,8 @@ class While : CliktCommand() {
 
   private val kInd: Boolean by option("-k", "--kind", help = "run k-induction checker").flag()
 
-  private val useWhileInvariant by option("--kInd-inv", help = "use while invariant in k-induction").flag()
+  private val useWhileInvariant by
+      option("--kInd-inv", help = "use while invariant in k-induction").flag()
 
   private val gpdr: Boolean by option("-g", "--gpdr", help = "run gpdr checker").flag()
 
