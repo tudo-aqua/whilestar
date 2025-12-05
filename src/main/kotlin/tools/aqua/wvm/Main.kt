@@ -57,6 +57,8 @@ class While : CliktCommand() {
 
   private val kInd: Boolean by option("-k", "--kind", help = "run k-induction checker").flag()
 
+  private val useWhileInvariant by option("--kInd-inv", help = "use while invariant in k-induction").flag()
+
   private val gpdr: Boolean by option("-g", "--gpdr", help = "run gpdr checker").flag()
 
   private val gpdrSubModelInterpolants: Boolean by
@@ -136,7 +138,7 @@ class While : CliktCommand() {
       if (bmc && kInd) {
         println("======= Running BMC with k-induction =======")
         val out = Output()
-        val bmcKIndChecker = KInductionCheckerWithBMC(context, out, verbose)
+        val bmcKIndChecker = KInductionCheckerWithBMC(context, out, verbose, useWhileInvariant)
         val result = bmcKIndChecker.check()
         println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
@@ -158,7 +160,7 @@ class While : CliktCommand() {
       if (kInd && !bmc) {
         println("======== Running k-induction checker: =======")
         val out = Output()
-        val kIndChecker = KInductionChecker(context, out, verbose)
+        val kIndChecker = KInductionChecker(context, out, verbose, useWhileInvariant)
         val result = kIndChecker.check()
         println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")

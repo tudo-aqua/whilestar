@@ -42,10 +42,11 @@ class KInductionChecker(
     override val context: Context,
     override val out: Output = Output(),
     override val verbose: Boolean = false,
+    useWhileInvariant: Boolean = false,
     val kBound: Int = 100
 ) : VerificationApproach {
   override val name: String = "K-Induction Checker"
-  val transitionSystem = TransitionSystem(context, verbose)
+  val transitionSystem = TransitionSystem(context, verbose, useWhileInvariant)
 
   override fun check(): VerificationResult {
     try {
@@ -143,10 +144,11 @@ class KInductionCheckerWithBMC(
     override val context: Context,
     override val out: Output = Output(),
     override val verbose: Boolean = false,
+    useWhileInvariant: Boolean = false,
     val kBound: Int = 100
 ) : VerificationApproach {
   override val name: String = "K-Induction Checker with BMC"
-  val transitionSystem = TransitionSystem(context, verbose)
+  val transitionSystem = TransitionSystem(context, verbose, useWhileInvariant)
 
   override fun check(): VerificationResult {
     try {

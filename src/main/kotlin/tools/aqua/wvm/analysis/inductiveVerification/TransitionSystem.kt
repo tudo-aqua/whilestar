@@ -25,7 +25,7 @@ import tools.aqua.wvm.machine.Context
 open class TransitionSystem(
     val context: Context,
     verbose: Boolean = false,
-    val useWhileInvariant: Boolean = true,
+    val useWhileInvariant: Boolean = false,
     val skipPrints: Boolean = true
 ) {
   // Possible system states s\in S_{V,\mu}
