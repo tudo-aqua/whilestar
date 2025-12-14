@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.hoare
 
+import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.BooleanExpression
 import tools.aqua.wvm.language.Not
@@ -32,3 +33,33 @@ data class Entailment(
 
   fun smtTest() = And(left, Not(right))
 }
+
+data class VerificationCondition(val entailment: Entailment, var result: String = "not solved") {
+  val explanation: String
+    get() = entailment.explanation
+
+  val implication: String
+    get() = "(${entailment.left} |= ${entailment.right})"
+
+  fun solve(): SatStatus {
+    val solver = SMTSolver()
+    val smtResult = solver.solve(entailment.smtTest())
+    result =
+        when (smtResult.status) {
+          SatStatus.UNSAT -> "successful."
+          SatStatus.SAT -> "counterexample: ${smtResult.model}"
+          SatStatus.UNKNOWN -> "could not be decided.."
+          SatStatus.PENDING -> "error during solving."
+        }
+    return smtResult.status
+  }
+}
+
+data class ProofTableRow(
+    val statement: String,
+    var wpc: String,
+    var post: String,
+    var vcs: MutableList<VerificationCondition> = mutableListOf(),
+    var commentWPC: String? = null,
+    val commentPost: String? = null
+)

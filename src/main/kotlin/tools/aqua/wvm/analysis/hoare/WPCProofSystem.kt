@@ -73,6 +73,117 @@ class WPCProofSystem(val context: Context, val output: Output) {
         l1 + l2
       }
 
+  private fun vcgen(
+      pre: BooleanExpression,
+      program: List<Statement>,
+      post: BooleanExpression,
+      proofTable: MutableList<ProofTableRow>
+  ): List<Entailment> {
+    val wpc = wpc(SequenceOfStatements(program), post)
+    val l1 = listOf(Entailment(pre, wpc, "Precondition"))
+    val vars = context.scope.symbols.map { " ${it.value.type} ${it.key};\n" }.joinToString("")
+    val preTable = ProofTableRow("Vars: \n$vars", pre.toString(), context.scope.symbols.map { " ${it.value.type} ${it.key} = 0;" }.joinToString(""))
+    preTable.vcs.add(VerificationCondition(l1.first()))
+    proofTable.add(preTable)
+    val l2 = vcgen(SequenceOfStatements(program), post, proofTable)
+    return l1 + l2
+  }
+
+  private fun vcgen(
+      stmt: Statement,
+      post: BooleanExpression,
+      proofTable: MutableList<ProofTableRow>
+  ): List<Entailment> =
+      when (stmt) {
+        is While -> {
+          val whileRow =
+              ProofTableRow(
+                  statement = "while (${stmt.head}) invariant (${stmt.invariant}) {",
+                  wpc = wpc(stmt, post).toString(),
+                  post = "",
+                  commentWPC = "loop invariant")
+          proofTable.add(whileRow)
+
+          val wpcBody = wpc(stmt.body, prepare(stmt.invariant))
+          val assumption = prepare(stmt.invariant)
+          
+          val bodyStartIndex = proofTable.size
+          val vcsBody = vcgen(stmt.body, prepare(stmt.invariant), proofTable)
+          if (proofTable.size > bodyStartIndex) {
+              proofTable[bodyStartIndex].commentWPC = "wpc of body"
+          }
+
+          val closingBraceRow = ProofTableRow("};", wpc(stmt, post).toString(), post.toString())
+          proofTable.add(closingBraceRow)
+
+          val bodyEntailment =
+              Entailment(
+                  And(assumption, prepare(stmt.head)),
+                  wpcBody,
+                  "Invariant and loop condition imply body's wpc")
+          whileRow.vcs.add(VerificationCondition(bodyEntailment))
+
+          val postEntailment =
+              Entailment(
+                  And(assumption, Not(prepare(stmt.head))),
+                  post,
+                  "Invariant and negated loop condition imply post")
+          closingBraceRow.vcs.add(VerificationCondition(postEntailment))
+
+          listOf(bodyEntailment, postEntailment) + vcsBody
+        }
+        is IfThenElse -> {
+          val ifRow =
+              ProofTableRow(
+                  statement = "if (${stmt.cond} {",
+                  wpc = wpc(stmt, post).toString(),
+                  post = "",
+                  commentWPC = "wpc of if")
+
+          proofTable.add(ifRow)
+          val vcs1 = vcgen(stmt.thenBlock, post, proofTable)
+          val elseRow =
+              ProofTableRow(
+                  statement = "} else {",
+                  wpc = "",
+                  post = "",
+              )
+          proofTable.add(elseRow)
+          val vcs2 = vcgen(stmt.elseBlock, post, proofTable)
+          val closingBraceRow =
+              ProofTableRow(
+                  statement = "}",
+                  wpc = "",
+                  post = "",
+              )
+          proofTable.add(closingBraceRow)
+          vcs1 + vcs2
+        }
+        else -> {
+          val wpc = wpc(stmt, post)
+          val row =
+              ProofTableRow(
+                  statement = stmt.toIndentedString("").trim(), wpc = wpc.toString(), post = "")
+          proofTable.add(row)
+          emptyList()
+        }
+      }
+
+  private fun vcgen(
+      stmt: SequenceOfStatements,
+      post: BooleanExpression,
+      proofTable: MutableList<ProofTableRow>
+  ): List<Entailment> =
+      if (stmt.isExhausted()) emptyList()
+      else {
+        val last = stmt.end()
+        val wpc = wpc(last, post)
+
+        val l1 = vcgen(SequenceOfStatements(stmt.front()), wpc, proofTable)
+        val l2 = vcgen(last, post, proofTable)
+        l1 + l2
+      }
+
   private fun wpc(stmt: Statement, post: BooleanExpression): BooleanExpression =
       when (stmt) {
         is While -> prepare(stmt.invariant)
@@ -341,6 +452,26 @@ class WPCProofSystem(val context: Context, val output: Output) {
       }
     }
     output.println("=============================================")
+    output.println("The proof was ${if (success) "" else "not "}successful.")
+    return success
+  }
+
+  fun proof(proofTable: MutableList<ProofTableRow>): Boolean {
+    val pre = augment(context.pre, context.scope)
+    vcgen(pre, context.program, prepare(context.post), proofTable)
+    var success = true
+
+    for (vc in proofTable.flatMap { it.vcs }) {
+      val status = vc.solve()
+      success = success and (status == SatStatus.UNSAT)
+    }
+    if (proofTable.size > 1) {
+      proofTable[1].commentWPC = "wpc of program"
+      proofTable[0].wpc = ""
+    }
+    proofTable.last().post = context.post.toString()
+    proofTable.first().wpc = ""
+    println(proofTable.toString())
     output.println("The proof was ${if (success) "" else "not "}successful.")
     return success
   }
