@@ -82,7 +82,11 @@ class WPCProofSystem(val context: Context, val output: Output) {
     val wpc = wpc(SequenceOfStatements(program), post)
     val l1 = listOf(Entailment(pre, wpc, "Precondition"))
     val vars = context.scope.symbols.map { " ${it.value.type} ${it.key};\n" }.joinToString("")
-    val preTable = ProofTableRow("Vars: \n$vars", pre.toString(), context.scope.symbols.map { " ${it.value.type} ${it.key} = 0;" }.joinToString(""))
+    val preTable =
+        ProofTableRow(
+            "Vars: \n$vars",
+            pre.toString(),
+            context.scope.symbols.map { " ${it.value.type} ${it.key} = 0;" }.joinToString(""))
     preTable.vcs.add(VerificationCondition(l1.first()))
     proofTable.add(preTable)
     val l2 = vcgen(SequenceOfStatements(program), post, proofTable)
@@ -106,11 +110,11 @@ class WPCProofSystem(val context: Context, val output: Output) {
 
           val wpcBody = wpc(stmt.body, prepare(stmt.invariant))
           val assumption = prepare(stmt.invariant)
-          
+
           val bodyStartIndex = proofTable.size
           val vcsBody = vcgen(stmt.body, prepare(stmt.invariant), proofTable)
           if (proofTable.size > bodyStartIndex) {
-              proofTable[bodyStartIndex].commentWPC = "wpc of body"
+            proofTable[bodyStartIndex].commentWPC = "wpc of body"
           }
 
           val closingBraceRow = ProofTableRow("};", wpc(stmt, post).toString(), post.toString())
