@@ -5,8 +5,8 @@ vars:
     int y;
     int z;
 code:
-    extern a 0 .. 100;
-    extern b 0 .. 100;
+    a := 3;
+    b := 8;
     print "Testing ExSymExe25", x;
     x := a;
     y := b;
@@ -20,8 +20,8 @@ code:
         print "Branch F002", z;
     };
     if (x > 0) {
-        assert (false);
         print "Branch B001", x;
     } else {
+        assert (false);
         print "Branch B002", x;
     };

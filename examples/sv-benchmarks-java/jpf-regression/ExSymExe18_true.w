@@ -13,9 +13,9 @@ code:
     r := y * x;
     if (z > x) {
         print "Branch F001", z;
+        assert (false);
     } else {
         print "Branch F002", z;
-        assert (false);
     };
     if (x > r) {
         print "Branch B001", x;
