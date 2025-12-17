@@ -2,7 +2,7 @@ vars:
   int a;
   int b;
 code:
-  while (a == 1) {
+  while (a == 0) {
     extern a 0..1;
     b := b;
   };
