@@ -161,10 +161,16 @@ class GPDR(
       // VALID: Stop when over-approximations become inductive:
       // R_i \models R_{i+1}, return valid
       // TODO: Should it test all previous approximations?
-      if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
-        out.println("System is VALID R_${N-1} models R_${N-2}.")
-        return VerificationResult.Proof("System is VALID.", "R_${N-2} models R_${N-1}")
+      for (i in 1 until N) {
+        if (testEntailment(approximations[i], approximations[i - 1])) {
+          out.println("System is VALID R_$i models R_${i-1}.")
+          return VerificationResult.Proof("System is VALID.", "R_$i models R_${i-1}")
+        }
       }
+      //if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
+      //  out.println("System is VALID R_${N-1} models R_${N-2}.")
+      //  return VerificationResult.Proof("System is VALID.", "R_${N-2} models R_${N-1}")
+      //}
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
       if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
         out.println("System is INVALID. Model: ${candidateModels.first()}")
