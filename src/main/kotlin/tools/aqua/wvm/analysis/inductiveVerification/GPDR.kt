@@ -77,28 +77,30 @@ class GPDR(
   var safety = transitionSystem.invariant // Safety property S
 
   val booleanVariableConstraint: BooleanExpression =
-      transitionSystem.context.scope.symbols
-          .map {
-            listOf(
-                    Gte(
-                        ValAtAddr(Variable(it.key)),
-                        NumericLiteral(
-                            0.toBigInteger())), // May be fixed for "normal" integer variables
-                    Lt(
-                        ValAtAddr(Variable(it.key)),
-                        NumericLiteral(
-                            (if (useArrayTransitionSystem) transitionSystem.memorySize else 2)
-                                .toBigInteger())),
-                    if (useArrayTransitionSystem &&
-                        booleanEvaluation &&
-                        it.value.type == BasicType.INT)
+      if (useArrayTransitionSystem)
+          And(
+              transitionSystem.varsInMemory,
+              transitionSystem.context.scope.symbols
+                  .map {
+                    if (booleanEvaluation && it.value.type == BasicType.INT)
                         Lt( // Constrain normal variables to be boolean,
                             ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
                             NumericLiteral(2.toBigInteger()))
-                    else True)
-                .reduceOrDefault(True) { acc, next -> And(acc, next) }
-          }
-          .reduceOrDefault(True) { acc, next -> And(acc, next) }
+                    else True
+                  }
+                  .reduceOrDefault(True) { acc, next -> And(acc, next) })
+      else
+          transitionSystem.context.scope.symbols
+              .map {
+                listOf(
+                        Gte(
+                            ValAtAddr(Variable(it.key)),
+                            NumericLiteral(
+                                0.toBigInteger())), // May be fixed for "normal" integer variables
+                        Lt(ValAtAddr(Variable(it.key)), NumericLiteral(2.toBigInteger())))
+                    .reduceOrDefault(True) { acc, next -> And(acc, next) }
+              }
+              .reduceOrDefault(True) { acc, next -> And(acc, next) }
   val booleanMemoryConstraint: BooleanExpression =
       if (useArrayTransitionSystem) {
         (0..transitionSystem.memorySize - 1)
@@ -167,10 +169,10 @@ class GPDR(
           return VerificationResult.Proof("System is VALID.", "R_$i models R_${i-1}")
         }
       }
-      //if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
+      // if ((N > 1) && testEntailment(approximations[N - 1], approximations[N - 2])) {
       //  out.println("System is VALID R_${N-1} models R_${N-2}.")
       //  return VerificationResult.Proof("System is VALID.", "R_${N-2} models R_${N-1}")
-      //}
+      // }
       // MODEL: If <M, 0> is a candidate model, then report that S is violated
       if (!candidateModels.isEmpty() && candidateModels.first().second == 0) {
         out.println("System is INVALID. Model: ${candidateModels.first()}")

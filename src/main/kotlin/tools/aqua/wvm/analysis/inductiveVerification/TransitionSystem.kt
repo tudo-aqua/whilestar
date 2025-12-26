@@ -37,6 +37,7 @@ open class TransitionSystem(
   var transitions: BooleanExpression = True // transition relation //\Gamma
   var invariant: BooleanExpression = True
   var numLocations: Int = 0
+  var varsInMemory: BooleanExpression = True
 
   data class LocationID(var id: Int)
 
@@ -45,6 +46,8 @@ open class TransitionSystem(
 
   init {
     if (verbose) println("Variables: $vars")
+    varsInMemory = initVars()
+    if (verbose) println("Variables in memory init: $varsInMemory")
     val memInit = initMemory() // Memory initialized, vars point to index, values are zero
     val preOnMemory = prepareOnMemory(context.pre)
     val initialLoc = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
@@ -63,6 +66,27 @@ open class TransitionSystem(
     invariant = And(notError, Or(Not(atEnd), prepareOnMemory(context.post)))
     if (verbose) println("Invariant: $invariant")
     numLocations = locId.id + 1
+  }
+
+  private fun initVars(): BooleanExpression {
+    var memIndex = 0
+    return context.scope.symbols
+        .map {
+          when {
+            it.value.type == BasicType.INT -> // integer variable initialized to 0
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0)
+            it.value.type is Pointer && it.value.size == 1 -> // pointer to integer initialized to 0
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0)
+            it.value.size > 1 -> { // array initialized to 0
+              val eq = Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0)
+              memIndex += it.value.size
+              eq
+            }
+            else ->
+                throw Exception("Unsupported variable type in transition system initial condition.")
+          }
+        }
+        .reduceOrDefault(True) { acc, next -> And(acc, next) }
   }
 
   private fun initMemory(): BooleanExpression {
@@ -324,7 +348,7 @@ open class TransitionSystem(
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {
     // This is a new bound variable. It could be removed, but than the code below becomes longer.
     // (Eq-Block for both Lte and Lt)
-    val boundVar = Variable("ext_${uniqueExternVarID++}")
+    val boundVar = Variable("ext_${uniqueExternVarID++}_ext")
     return makeSingleTransition(
         Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
         Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
