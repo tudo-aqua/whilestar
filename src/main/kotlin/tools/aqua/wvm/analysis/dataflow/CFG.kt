@@ -44,6 +44,7 @@ data object EmptyCFG : CFG {
 }
 
 class CFGNode<T : Statement>(val stmt: T) {
+  var id: Int = 0
   override fun toString(): String = "CFGNode(stmt=$stmt)"
 }
 
@@ -70,6 +71,11 @@ data class ComplexCFG(
     val initial: List<CFGNode<*>>,
     val final: List<CFGNode<*>>
 ) : CFG {
+
+  init {
+    nodes.forEach { it.id = idOf(it) }
+  }
+
   override fun nodes(): List<CFGNode<*>> = nodes
 
   override fun edges(): List<CFGEdge> = edges

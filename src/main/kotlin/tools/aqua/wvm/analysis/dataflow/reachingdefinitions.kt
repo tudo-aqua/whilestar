@@ -27,22 +27,16 @@ sealed interface RDFact : Fact {
   fun varname(): String
 }
 
-data class RDInitFact(val varname: String, val init: Boolean) : RDFact {
+data class RDInitFact(val varname: String) : RDFact {
   override fun varname() = varname
 
-  override fun toString(): String = "($varname, ${if (init) "init" else "?"})"
+  override fun toString(): String = "($varname, ?)"
 }
 
 data class RDWriteFact(val varname: String, val node: CFGNode<*>) : RDFact {
   override fun varname() = varname
 
-  override fun toString(): String = "($varname, write)"
-}
-
-data class RDHavocFact(val varname: String, val node: CFGNode<*>) : RDFact {
-  override fun varname() = varname
-
-  override fun toString(): String = "($varname, havoc)"
+  override fun toString(): String = "($varname, ${node.id})"
 }
 
 fun unitialized(node: CFGNode<*>, marking: Map<CFGNode<*>, InOut<RDFact>>) =
@@ -56,7 +50,7 @@ val RDAnalysis =
           c.nodes().associateWith { node ->
             Pair<Set<RDFact>, Set<RDFact>>(
                 if (!c.initial().contains(node)) emptySet()
-                else varsInCFG(c).map { RDInitFact(it, s.getNames().contains(it)) }.toSet(),
+                else varsInCFG(c).map { RDInitFact(it) }.toSet(),
                 emptySet())
           }
         },
@@ -72,7 +66,7 @@ val RDAnalysis =
         swapKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
         havocGen = { node, _ ->
           val vrs = varsInExpr(node.stmt.addr)
-          vrs.map { RDHavocFact(it, node) }.toSet()
+          vrs.map { RDWriteFact(it, node) }.toSet()
         },
         havocKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
         check =
@@ -109,7 +103,7 @@ object RDGenKill {
             (varsInExpr(stmt.left) + varsInExpr(stmt.right))
                 .map { RDWriteFact(it, node).toString() }
                 .toSet()
-        is Havoc -> varsInExpr(stmt.addr).map { RDHavocFact(it, node).toString() }.toSet()
+        is Havoc -> varsInExpr(stmt.addr).map { RDWriteFact(it, node).toString() }.toSet()
         else -> emptySet()
       }
 
