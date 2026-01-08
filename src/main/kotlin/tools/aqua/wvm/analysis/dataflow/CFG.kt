@@ -45,6 +45,7 @@ data object EmptyCFG : CFG {
 
 class CFGNode<T : Statement>(val stmt: T) {
   var id: Int = 0
+
   override fun toString(): String = "CFGNode(stmt=$stmt)"
 }
 
@@ -123,10 +124,8 @@ fun cfg(stmt: Statement): CFG =
         val thenBlock = cfg(stmt.thenBlock.statements)
         val elseBlock = cfg(stmt.elseBlock.statements)
         val final =
-            (if (thenBlock is EmptyCFG) listOf(ifNode)
-            else
-                thenBlock.final() +
-                    if (elseBlock is EmptyCFG) listOf(ifNode) else elseBlock.final())
+            (if (thenBlock is EmptyCFG) listOf(ifNode) else thenBlock.final()) +
+                (if (elseBlock is EmptyCFG) listOf(ifNode) else elseBlock.final())
         ComplexCFG(
             thenBlock.nodes() + elseBlock.nodes() + listOf(ifNode),
             thenBlock.edges() +

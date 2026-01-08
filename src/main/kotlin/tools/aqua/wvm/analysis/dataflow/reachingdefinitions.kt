@@ -21,7 +21,9 @@ package tools.aqua.wvm.analysis.dataflow
 import tools.aqua.wvm.language.Assignment
 import tools.aqua.wvm.language.Fail
 import tools.aqua.wvm.language.Havoc
+import tools.aqua.wvm.language.IfThenElse
 import tools.aqua.wvm.language.Swap
+import tools.aqua.wvm.language.While
 
 sealed interface RDFact : Fact {
   fun varname(): String
@@ -77,6 +79,8 @@ val RDAnalysis =
                         .intersect(
                             when (node.stmt) {
                               is Assignment -> varsInExpr(node.stmt.expr)
+                              is IfThenElse -> varsInExpr(node.stmt.cond)
+                              is While -> varsInExpr(node.stmt.head)
                               is Fail -> emptySet()
                               is Havoc -> emptySet()
                               else -> varsInStmt(node.stmt)
@@ -109,9 +113,9 @@ object RDGenKill {
 
   fun kill(node: CFGNode<*>): Set<String> =
       when (val stmt = node.stmt) {
-        is Assignment -> varsInExpr(stmt.addr)
-        is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)
-        is Havoc -> varsInExpr(stmt.addr)
+        is Assignment -> varsInExpr(stmt.addr).map { "($it, *)" }.toSet()
+        is Swap -> (varsInExpr(stmt.left) + varsInExpr(stmt.right)).map { "($it, *)" }.toSet()
+        is Havoc -> varsInExpr(stmt.addr).map { "($it, *)" }.toSet()
         else -> emptySet()
       }
 }

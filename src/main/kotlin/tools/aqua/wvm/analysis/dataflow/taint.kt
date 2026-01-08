@@ -67,7 +67,10 @@ val TaintAnalysis =
             Check { cfg, marking ->
               val taintedPrints =
                   marking
-                      .filter { (node, taint) -> node.stmt is Print && !taint.first.isEmpty() }
+                      .filter { (node, taint) ->
+                        node.stmt is Print &&
+                            taint.first.any { varsInStmt(node.stmt).contains(it.varname) }
+                      }
                       .entries
 
               if (taintedPrints.isEmpty()) {
@@ -109,7 +112,7 @@ object TaintGenKill {
 
   fun kill(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
       when (val stmt = node.stmt) {
-        is Assignment -> if(gen(node, inflow).isEmpty()){varsInExpr(stmt.addr)} else emptySet()
+        is Assignment -> varsInExpr(stmt.addr)
         is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)
         else -> emptySet()
       }
