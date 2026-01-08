@@ -28,6 +28,7 @@ import tools.aqua.wvm.machine.Scope
 class WPCProofSystem(val context: Context, val output: Output) {
 
   private var uniqueId = 0
+  private var simplify = false
 
   private fun vcgen(
       pre: BooleanExpression,
@@ -80,7 +81,13 @@ class WPCProofSystem(val context: Context, val output: Output) {
       proofTable: MutableList<ProofTableRow>
   ): List<Entailment> {
     val wpc = wpc(SequenceOfStatements(program), post)
-    val l1 = listOf(Entailment(pre, wpc, "Precondition"))
+    val varsDisplay =
+        if (context.scope.symbols.isEmpty()) "true"
+        else
+            context.scope.symbols.entries.joinToString(" ∧ ") {
+              if (it.value.size > 1) "∀i. ${it.key}[i]=0" else "${it.key}=0"
+            }
+    val l1 = listOf(Entailment(pre, wpc, "Precondition", leftDisplay = varsDisplay))
     val vars = context.scope.symbols.map { " ${it.value.type} ${it.key};\n" }.joinToString("")
     val preTable =
         ProofTableRow(
@@ -311,7 +318,17 @@ class WPCProofSystem(val context: Context, val output: Output) {
 
   private fun replaceM(phi: ArithmeticExpression, write: ArrayWrite): ArithmeticExpression =
       when (phi) {
-        is ValAtAddr -> ValAtAddr(replaceM(phi.addr, write))
+        is ValAtAddr -> {
+          val newAddr = replaceM(phi.addr, write)
+          if (simplify &&
+              newAddr is ArrayRead &&
+              newAddr.array == write &&
+              newAddr.index == write.index) {
+            write.value
+          } else {
+            ValAtAddr(newAddr)
+          }
+        }
         is NumericLiteral -> NumericLiteral(phi.literal)
         is UnaryMinus -> UnaryMinus(replaceM(phi.negated, write))
         is Add -> Add(replaceM(phi.left, write), replaceM(phi.right, write))
@@ -395,7 +412,11 @@ class WPCProofSystem(val context: Context, val output: Output) {
     }
   }
 
-  fun augment(pre: BooleanExpression, scope: Scope): BooleanExpression {
+  fun augment(
+      pre: BooleanExpression,
+      scope: Scope,
+      useQuantifiers: Boolean = false
+  ): BooleanExpression {
     var newPre = prepare(pre)
     var addr = 0L
     for (entry in scope.symbols) {
@@ -414,15 +435,32 @@ class WPCProofSystem(val context: Context, val output: Output) {
                       0)))
       addr++
       if (entry.value.size > 1) {
-        for (i in 0 ..< entry.value.size - 1) {
-          newPre =
+        if (useQuantifiers) {
+          val start = addr
+          val end = addr + entry.value.size - 1
+          val boundVar = Variable("i_${uniqueId++}")
+          val range =
               And(
-                  newPre,
-                  Eq(
-                      ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
-                      NumericLiteral(BigInteger.ZERO),
-                      0))
-          addr++
+                  Gte(ValAtAddr(boundVar), NumericLiteral(start.toBigInteger())),
+                  Lt(ValAtAddr(boundVar), NumericLiteral(end.toBigInteger())))
+          val init =
+              Eq(
+                  ValAtAddr(ArrayRead(AnyArray, ValAtAddr(boundVar))),
+                  NumericLiteral(BigInteger.ZERO),
+                  0)
+          newPre = And(newPre, Forall(boundVar, Imply(range, init)))
+          addr += entry.value.size - 1
+        } else {
+          for (i in 0 ..< entry.value.size - 1) {
+            newPre =
+                And(
+                    newPre,
+                    Eq(
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
+                        NumericLiteral(BigInteger.ZERO),
+                        0))
+            addr++
+          }
         }
       }
     }
@@ -430,6 +468,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
   }
 
   fun proof(): Boolean {
+    simplify = false
     val pre = augment(context.pre, context.scope)
     val vcs = vcgen(pre, context.program, prepare(context.post))
     output.println("==== generating verification conditions: ====")
@@ -461,7 +500,8 @@ class WPCProofSystem(val context: Context, val output: Output) {
   }
 
   fun proof(proofTable: MutableList<ProofTableRow>): Boolean {
-    val pre = augment(context.pre, context.scope)
+    simplify = true
+    val pre = augment(context.pre, context.scope, useQuantifiers = true)
     vcgen(pre, context.program, prepare(context.post), proofTable)
     var success = true
 

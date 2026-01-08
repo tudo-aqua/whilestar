@@ -18,7 +18,10 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
+import tools.aqua.wvm.language.Assignment
+import tools.aqua.wvm.language.Havoc
 import tools.aqua.wvm.language.Print
+import tools.aqua.wvm.language.Swap
 
 data class TaintFact(val varname: String) : Fact {
   override fun toString(): String = "$varname"
@@ -77,3 +80,37 @@ val TaintAnalysis =
                 "Taint check FAILED: The following statements are reachable by taint: $taintFlow"
               }
             })
+
+object TaintGenKill {
+  fun gen(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
+      when (val stmt = node.stmt) {
+        is Havoc -> varsInExpr(stmt.addr)
+        is Assignment -> {
+          val taintedVars = inflow.map { it.varname }.toSet()
+          if (varsInExpr(stmt.expr).intersect(taintedVars).isNotEmpty()) {
+            varsInExpr(stmt.addr)
+          } else {
+            emptySet()
+          }
+        }
+        is Swap -> {
+          val taintedVars = inflow.map { it.varname }.toSet()
+          val genSet = mutableSetOf<String>()
+          if (varsInExpr(stmt.right).intersect(taintedVars).isNotEmpty()) {
+            genSet.addAll(varsInExpr(stmt.left))
+          }
+          if (varsInExpr(stmt.left).intersect(taintedVars).isNotEmpty()) {
+            genSet.addAll(varsInExpr(stmt.right))
+          }
+          genSet
+        }
+        else -> emptySet()
+      }
+
+  fun kill(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
+      when (val stmt = node.stmt) {
+        is Assignment -> if(gen(node, inflow).isEmpty()){varsInExpr(stmt.addr)} else emptySet()
+        is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)
+        else -> emptySet()
+      }
+}

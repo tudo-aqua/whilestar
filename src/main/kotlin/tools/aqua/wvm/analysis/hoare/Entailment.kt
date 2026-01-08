@@ -26,10 +26,12 @@ import tools.aqua.wvm.language.Not
 data class Entailment(
     val left: BooleanExpression,
     val right: BooleanExpression,
-    val explanation: String
+    val explanation: String,
+    val leftDisplay: String? = null,
+    val rightDisplay: String? = null
 ) {
 
-  override fun toString(): String = "$explanation: (|= $left $right)"
+  override fun toString(): String = "$explanation: (⊧ $left $right)"
 
   fun smtTest() = And(left, Not(right))
 }
@@ -39,7 +41,8 @@ data class VerificationCondition(val entailment: Entailment, var result: String 
     get() = entailment.explanation
 
   val implication: String
-    get() = "(${entailment.left} |= ${entailment.right})"
+    get() =
+        "(${entailment.leftDisplay ?: entailment.left} ⊧ ${entailment.rightDisplay ?: entailment.right})"
 
   fun solve(): SatStatus {
     val solver = SMTSolver()

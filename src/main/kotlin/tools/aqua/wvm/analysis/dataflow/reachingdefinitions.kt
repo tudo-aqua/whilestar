@@ -21,6 +21,7 @@ package tools.aqua.wvm.analysis.dataflow
 import tools.aqua.wvm.language.Assignment
 import tools.aqua.wvm.language.Fail
 import tools.aqua.wvm.language.Havoc
+import tools.aqua.wvm.language.Swap
 
 sealed interface RDFact : Fact {
   fun varname(): String
@@ -99,3 +100,24 @@ val RDAnalysis =
                 "Reaching definitions check FAILED: $rdInfo"
               }
             })
+
+object RDGenKill {
+  fun gen(node: CFGNode<*>): Set<String> =
+      when (val stmt = node.stmt) {
+        is Assignment -> varsInExpr(stmt.addr).map { RDWriteFact(it, node).toString() }.toSet()
+        is Swap ->
+            (varsInExpr(stmt.left) + varsInExpr(stmt.right))
+                .map { RDWriteFact(it, node).toString() }
+                .toSet()
+        is Havoc -> varsInExpr(stmt.addr).map { RDHavocFact(it, node).toString() }.toSet()
+        else -> emptySet()
+      }
+
+  fun kill(node: CFGNode<*>): Set<String> =
+      when (val stmt = node.stmt) {
+        is Assignment -> varsInExpr(stmt.addr)
+        is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)
+        is Havoc -> varsInExpr(stmt.addr)
+        else -> emptySet()
+      }
+}
