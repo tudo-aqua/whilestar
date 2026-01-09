@@ -107,7 +107,11 @@ data class DataflowAnalysis<F : Fact>(
                         else marking[n]!!.first)
                   }
                 }
-          } + if (direction == Direction.Forward) marking[node]!!.first else marking[node]!!.second
+          } +
+              if (type == AnalysisType.May) {
+                (if (direction == Direction.Forward) marking[node]!!.first
+                else marking[node]!!.second)
+              } else emptySet()
       val outFacts =
           when (node.stmt) {
             is IfThenElse ->

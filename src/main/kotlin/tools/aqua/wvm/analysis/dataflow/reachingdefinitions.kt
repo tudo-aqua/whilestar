@@ -41,7 +41,7 @@ data class RDWriteFact(val varname: String, val node: CFGNode<*>) : RDFact {
   override fun toString(): String = "($varname, ${node.id})"
 }
 
-fun unitialized(node: CFGNode<*>, marking: Map<CFGNode<*>, InOut<RDFact>>) =
+fun uninitialized(node: CFGNode<*>, marking: Map<CFGNode<*>, InOut<RDFact>>) =
     marking[node]!!.first.filter { it is RDInitFact }.map { it.varname() }.toSet()
 
 val RDAnalysis =
@@ -73,9 +73,9 @@ val RDAnalysis =
         havocKill = { fact, node -> varsInStmt(node.stmt).contains(fact.varname()) },
         check =
             Check { cfg, marking ->
-              val unitialized =
+              val uninitializedVars =
                   cfg.nodes().associateWith { node ->
-                    unitialized(node, marking)
+                    uninitialized(node, marking)
                         .intersect(
                             when (node.stmt) {
                               is Assignment -> varsInExpr(node.stmt.expr)
@@ -87,11 +87,11 @@ val RDAnalysis =
                             })
                   }
 
-              if (unitialized.none { it.value.isNotEmpty() }) {
+              if (uninitializedVars.none { it.value.isNotEmpty() }) {
                 "Reaching definitions check OK: No uninitialized variables are read"
               } else {
                 val rdInfo =
-                    unitialized
+                    uninitializedVars
                         .filter { it.value.isNotEmpty() }
                         .map { "${cfg.idOf(it.key)} reads ${it.value.joinToString(", ")}" }
                         .sorted()
