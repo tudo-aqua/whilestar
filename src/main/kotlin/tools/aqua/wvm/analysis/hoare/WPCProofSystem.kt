@@ -418,6 +418,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
       useQuantifiers: Boolean = false
   ): BooleanExpression {
     var newPre = prepare(pre)
+    if (newPre != True) return newPre
     var addr = 0L
     for (entry in scope.symbols) {
       val value = if (entry.value.size == 1) 0 else addr + 1
