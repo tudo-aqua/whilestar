@@ -81,19 +81,14 @@ class WPCProofSystem(val context: Context, val output: Output) {
       proofTable: MutableList<ProofTableRow>
   ): List<Entailment> {
     val wpc = wpc(SequenceOfStatements(program), post)
-    val varsDisplay =
-        if (context.scope.symbols.isEmpty()) "true"
-        else
-            context.scope.symbols.entries.joinToString(" ∧ ") {
-              if (it.value.size > 1) "∀i. ${it.key}[i]=0" else "${it.key}=0"
-            }
+    val varsDisplay = "$pre"
     val l1 = listOf(Entailment(pre, wpc, "Precondition", leftDisplay = varsDisplay))
     val vars = context.scope.symbols.map { " ${it.value.type} ${it.key};\n" }.joinToString("")
     val preTable =
         ProofTableRow(
-            "Vars: \n$vars",
-            pre.toString(),
-            context.scope.symbols.map { " ${it.value.type} ${it.key} = 0;" }.joinToString(""))
+            "vars: \n$vars",
+            "",
+            "$pre")
     preTable.vcs.add(VerificationCondition(l1.first()))
     proofTable.add(preTable)
     val l2 = vcgen(SequenceOfStatements(program), post, proofTable)
