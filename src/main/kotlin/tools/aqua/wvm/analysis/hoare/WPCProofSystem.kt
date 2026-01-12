@@ -255,13 +255,16 @@ class WPCProofSystem(val context: Context, val output: Output) {
           else ->
               throw Exception("this case is not supposed to be reachable: replaceM wpc of $stmt")
         }
-    return Forall(
-        boundVar,
-        Or(
-            Or(
-                Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
-                Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper))),
-            wpcInner))
+    val bounds = Or(
+            Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
+            Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper)))
+    if (wpcInner is Forall) {
+        val wpcInnerExpr = wpcInner.expression as Or
+        return Forall(boundVar, Forall(wpcInner.boundVar,
+            Or( Or(bounds, wpcInnerExpr.left), wpcInnerExpr.right )))
+    } else {
+        return Forall(boundVar, Or(bounds, wpcInner))
+    }
   }
 
   private fun wpc(stmt: SequenceOfStatements, post: BooleanExpression): BooleanExpression {
