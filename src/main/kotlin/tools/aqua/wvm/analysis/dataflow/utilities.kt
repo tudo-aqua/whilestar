@@ -41,6 +41,8 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
       is Equiv -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Not -> varsInExpr(expr.negated)
       is UnaryMinus -> varsInExpr(expr.negated)
+      is True -> emptySet()
+      is False -> emptySet()
       else -> error("Unsupported expression for dataflow analysis: $expr ${expr::class}")
     }
 
