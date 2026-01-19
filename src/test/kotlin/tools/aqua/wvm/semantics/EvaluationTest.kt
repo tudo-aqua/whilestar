@@ -25,7 +25,7 @@ import tools.aqua.wvm.parser.Parser
 class EvaluationTest {
   fun run(filename: String) {
     val source = File(filename).readText()
-    val context = Parser.parse(source)
+    val context = Parser().parse(source)
     context.execute(false)
   }
 
