@@ -84,11 +84,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
     val varsDisplay = "$pre"
     val l1 = listOf(Entailment(pre, wpc, "Precondition", leftDisplay = varsDisplay))
     val vars = context.scope.symbols.map { " ${it.value.type} ${it.key};\n" }.joinToString("")
-    val preTable =
-        ProofTableRow(
-            "vars: \n$vars",
-            "",
-            "$pre")
+    val preTable = ProofTableRow("vars: \n$vars", "", "$pre")
     preTable.vcs.add(VerificationCondition(l1.first()))
     proofTable.add(preTable)
     val l2 = vcgen(SequenceOfStatements(program), post, proofTable)
@@ -250,15 +246,17 @@ class WPCProofSystem(val context: Context, val output: Output) {
           else ->
               throw Exception("this case is not supposed to be reachable: replaceM wpc of $stmt")
         }
-    val bounds = Or(
+    val bounds =
+        Or(
             Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
             Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper)))
     if (wpcInner is Forall) {
-        val wpcInnerExpr = wpcInner.expression as Or
-        return Forall(boundVar, Forall(wpcInner.boundVar,
-            Or( Or(bounds, wpcInnerExpr.left), wpcInnerExpr.right )))
+      val wpcInnerExpr = wpcInner.expression as Or
+      return Forall(
+          boundVar,
+          Forall(wpcInner.boundVar, Or(Or(bounds, wpcInnerExpr.left), wpcInnerExpr.right)))
     } else {
-        return Forall(boundVar, Or(bounds, wpcInner))
+      return Forall(boundVar, Or(bounds, wpcInner))
     }
   }
 

@@ -80,7 +80,8 @@ val RDAnalysis =
                             when (node.stmt) {
                               is Assignment -> varsInExpr(node.stmt.expr)
                               is IfThenElse -> varsInExpr(node.stmt.cond)
-                              is While -> varsInExpr(node.stmt.head)
+                              is While ->
+                                  varsInExpr(node.stmt.head) + varsInExpr(node.stmt.invariant)
                               is Fail -> emptySet()
                               is Havoc -> emptySet()
                               else -> varsInStmt(node.stmt)

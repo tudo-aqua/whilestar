@@ -24,6 +24,9 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
     when (expr) {
       is ValAtAddr -> varsInExpr(expr.addr)
       is Variable -> setOf(expr.name)
+      is DeRef -> varsInExpr(expr.reference)
+      is ArrayAccess -> varsInExpr(expr.array) + varsInExpr(expr.index)
+      is VarAddress -> setOf(expr.variable.name)
       is NumericLiteral -> emptySet()
       is Add -> varsInExpr(expr.left) + varsInExpr(expr.right)
       is Sub -> varsInExpr(expr.left) + varsInExpr(expr.right)
@@ -43,13 +46,14 @@ fun varsInExpr(expr: Expression<*>): Set<String> =
       is UnaryMinus -> varsInExpr(expr.negated)
       is True -> emptySet()
       is False -> emptySet()
+      // Verification Expressions should not be reachable for the data flow analysis
       else -> error("Unsupported expression for dataflow analysis: $expr ${expr::class}")
     }
 
 fun varsInStmt(stmt: Statement): Set<String> =
     when (stmt) {
       is IfThenElse -> varsInExpr(stmt.cond) + varsInSeq(stmt.thenBlock) + varsInSeq(stmt.elseBlock)
-      is While -> varsInExpr(stmt.head) + varsInSeq(stmt.body) // todo: invariant?
+      is While -> varsInExpr(stmt.head) + varsInSeq(stmt.body) + varsInExpr(stmt.invariant)
       is Assignment -> varsInExpr(stmt.addr) + varsInExpr(stmt.expr)
       is Fail -> emptySet()
       is Havoc -> varsInExpr(stmt.addr)

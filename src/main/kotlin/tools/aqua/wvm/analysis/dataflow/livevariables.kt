@@ -60,7 +60,11 @@ val LVAnalysis =
         printGen = { node, _ ->
           node.stmt.values.map { varsInExpr(it) }.flatten().map { LVFact(it, node) }.toSet()
         },
-        whileGen = { node, _ -> varsInExpr(node.stmt.head).map { LVFact(it, node) }.toSet() },
+        whileGen = { node, _ ->
+          (varsInExpr(node.stmt.head) + varsInExpr(node.stmt.invariant))
+              .map { LVFact(it, node) }
+              .toSet()
+        },
         ifGen = { node, _ -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
         assertionGen = { node, _ -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
         check =
