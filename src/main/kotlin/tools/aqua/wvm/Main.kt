@@ -30,7 +30,6 @@ import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
-import tools.aqua.wvm.analysis.inductiveVerification.GPDR
 import tools.aqua.wvm.analysis.inductiveVerification.KInductionChecker
 import tools.aqua.wvm.analysis.inductiveVerification.KInductionCheckerWithBMC
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
@@ -60,20 +59,6 @@ class While : CliktCommand() {
   private val useWhileInvariant by
       option("--kInd-inv", help = "use while invariant in k-induction").flag()
 
-  private val gpdr: Boolean by option("-g", "--gpdr", help = "run gpdr checker").flag()
-
-  private val gpdrSubModelInterpolants: Boolean by
-      option("--gpdr-smi", help = "enable sub-model interpolation for gpdr").flag()
-
-  private val gpdrUseArrayTransitionSystem: Boolean by
-      option("--gpdr-ats", help = "use array transition system for gpdr").flag()
-
-  private val gpdrInitialSatTest: Boolean by
-      option("--gpdr-ist", help = "enable initial satisfiability test for gpdr").flag()
-
-  private val gpdrApproximationRefinementChecks: Boolean by
-      option("--gpdr-arc", help = "enable approximation refinement checks for gpdr").flag()
-
   // TODO: Make sure this is properly implemented throughout the codebase
   private val booleanEvaluation: Boolean by
       option("-B", "--boolean-eval", help = "enable boolean evaluation for gpdr").flag()
@@ -81,14 +66,11 @@ class While : CliktCommand() {
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
-  private val warmup: Boolean by
-      option("--warmup", help = "For measuring without any operation").flag()
-
   private val filename: String by argument(help = "source file to interpret")
 
   override fun run() {
 
-    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd && !gpdr && !warmup) {
+    if (!run && !typecheck && !proof && !symbolic && !bmc && !kInd) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -98,10 +80,6 @@ class While : CliktCommand() {
       val context = Parser.parse(source)
       if (externalInput) {
         context.input = Scanner(System.`in`)
-      }
-      if (warmup) {
-        println("Doing only warmup. Done. Returning.")
-        return
       }
 
       if (verbose) {
@@ -169,39 +147,6 @@ class While : CliktCommand() {
         println("=============================================")
       }
 
-      if (gpdr) {
-        println("=========== Running GPDR checker: ===========")
-        val out = Output()
-        val gpdrChecker =
-            GPDR(
-                context,
-                out,
-                verbose,
-                booleanEvaluation,
-                gpdrUseArrayTransitionSystem,
-                gpdrApproximationRefinementChecks,
-                gpdrInitialSatTest,
-                gpdrSubModelInterpolants,
-                bound = 1000)
-        val result =
-            try {
-              gpdrChecker.check()
-            } catch (e: IllegalSymbolException) {
-              VerificationResult.Crash("GPDR failed due to an illegal symbol.", e)
-            }
-        println("# Safe: $result")
-        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
-        SMTSolver.resetCallCounters()
-        println("=============================================")
-      } else {
-        if (gpdrSubModelInterpolants ||
-            gpdrUseArrayTransitionSystem ||
-            gpdrInitialSatTest ||
-            gpdrApproximationRefinementChecks) {
-          println("WARNING: GPDR sub-options were provided but GPDR checker was not enabled.")
-        }
-      }
-
       if (run) {
         println("============ Running program: ===============")
         val trace = context.execute(verbose || symbolic, symbolic, booleanEvaluation)
@@ -232,4 +177,3 @@ class While : CliktCommand() {
 }
 
 fun main(args: Array<String>) = While().main(args)
-// fun main(args: Array<String>) = While().main(listOf("-gB", "examples/gpdr-examples/ex1.w"))
