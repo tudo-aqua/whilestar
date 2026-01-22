@@ -22,16 +22,23 @@ import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 
-open class TransitionSystem(
+/**
+ * Transition system representation of a While* program.
+ *
+ * @property context The While* program context.
+ * @property verbose Whether to print verbose output during construction.
+ * @property useWhileInvariant Whether to use while invariants in the transition system.
+ * @property skipPrints Whether to skip print statements in the transition system.
+ */
+class TransitionSystem(
     val context: Context,
-    verbose: Boolean = false,
+    val verbose: Boolean = false,
     val useWhileInvariant: Boolean = false,
     val skipPrints: Boolean = true
 ) {
   // Possible system states s\in S_{V,\mu}
   val vars: MutableList<String> =
       context.scope.symbols.map { it.key } as MutableList<String> // V //Also: loc and memory
-  val memorySize = context.scope.symbols.map { it.value.size }.sum()
 
   var initial: BooleanExpression = True // all vars are zero // I
   var transitions: BooleanExpression = True // transition relation //\Gamma
