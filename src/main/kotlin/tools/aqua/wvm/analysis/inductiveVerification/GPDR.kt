@@ -76,31 +76,29 @@ class GPDR(
   val initial = transitionSystem.initial
   var safety = transitionSystem.invariant // Safety property S
 
-  val booleanVariableConstraint: BooleanExpression =
-      if (useArrayTransitionSystem)
-          And(
-              transitionSystem.varsInMemory,
-              transitionSystem.context.scope.symbols
-                  .map {
-                    if (booleanEvaluation && it.value.type == BasicType.INT)
+    val booleanVariableConstraint: BooleanExpression =
+        transitionSystem.context.scope.symbols
+            .map {
+                listOf(
+                    Gte(
+                        ValAtAddr(Variable(it.key)),
+                        NumericLiteral(
+                            0.toBigInteger())), // May be fixed for "normal" integer variables
+                    Lt(
+                        ValAtAddr(Variable(it.key)),
+                        NumericLiteral(
+                            (if (useArrayTransitionSystem) transitionSystem.memorySize else 2)
+                                .toBigInteger())),
+                    if (useArrayTransitionSystem &&
+                        booleanEvaluation &&
+                        it.value.type == BasicType.INT)
                         Lt( // Constrain normal variables to be boolean,
                             ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
                             NumericLiteral(2.toBigInteger()))
-                    else True
-                  }
-                  .reduceOrDefault(True) { acc, next -> And(acc, next) })
-      else
-          transitionSystem.context.scope.symbols
-              .map {
-                listOf(
-                        Gte(
-                            ValAtAddr(Variable(it.key)),
-                            NumericLiteral(
-                                0.toBigInteger())), // May be fixed for "normal" integer variables
-                        Lt(ValAtAddr(Variable(it.key)), NumericLiteral(2.toBigInteger())))
+                    else True)
                     .reduceOrDefault(True) { acc, next -> And(acc, next) }
-              }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
+            }
+            .reduceOrDefault(True) { acc, next -> And(acc, next) }
   val booleanMemoryConstraint: BooleanExpression =
       if (useArrayTransitionSystem) {
         (0..transitionSystem.memorySize - 1)
