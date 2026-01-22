@@ -21,9 +21,6 @@ package tools.aqua.wvm.analysis.inductiveVerification
 import kotlin.Int
 import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.konstraints.util.reduceOrDefault
-import tools.aqua.wvm.analysis.VerificationApproach
-import tools.aqua.wvm.analysis.VerificationResult
-import tools.aqua.wvm.analysis.VerificationResult.*
 import tools.aqua.wvm.analysis.hoare.Entailment
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
@@ -33,22 +30,31 @@ import tools.aqua.wvm.language.True
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 
-/*
- * K-Induction based safety checker.
+/**
+ * K-Induction based safety checker for While* programs.
  *
- * Note: Behaves like checking from the end of the program (at least for non-looping programs).
+ * @param context The program context containing the While* program to be checked.
+ * @param out The output stream for logging results and information.
+ * @param verbose Flag to enable verbose logging.
+ * @param useWhileInvariant Flag to indicate whether to use while loop invariants in the analysis.
+ * @param kBound The maximum value of k to be used in the k-induction process.
  */
 class KInductionChecker(
-    override val context: Context,
-    override val out: Output = Output(),
-    override val verbose: Boolean = false,
+    val context: Context,
+    val out: Output = Output(),
+    val verbose: Boolean = false,
     useWhileInvariant: Boolean = false,
     val kBound: Int = 100
-) : VerificationApproach {
-  override val name: String = "K-Induction Checker"
+) {
   val transitionSystem = TransitionSystem(context, verbose, useWhileInvariant)
 
-  override fun check(): VerificationResult {
+  /**
+   * Performs the k-induction safety check.
+   *
+   * @return true if the program is proven safe, false if a counterexample is found or the check
+   *   could not be completed.
+   */
+  fun check(): Boolean {
     try {
       for (k in 1..kBound) {
         out.println("=== K-Induction with k = $k ===")
@@ -64,15 +70,15 @@ class KInductionChecker(
           SatStatus.SAT -> out.println("Depth check passed. ${depthResult.model.toSortedMap()}")
           SatStatus.UNSAT -> {
             out.println("Depth check failed. Program may be shorter than k = $k.")
-            return Proof("Program is exhausted before k = $k.")
+            return true
           }
           SatStatus.UNKNOWN -> {
             out.println("Depth check at k = $k could not be decided.")
-            return Crash("BMC: Depth check at k = $k could not be decided.")
+            return false
           }
           SatStatus.PENDING -> {
             out.println("Error during SMT solving of depth check at k = $k.")
-            return Crash("BMC: Depth check at k = $k exited with an error during solving.")
+            return false
           }
         }
 
@@ -88,17 +94,16 @@ class KInductionChecker(
           SatStatus.UNSAT -> out.println("Base case passed.")
           SatStatus.SAT -> {
             out.println(
-                "Base case failed. ${k - 1}-safety does not hold. Counterexample: ${baseResult.model.toSortedMap()}")
-            return Counterexample(
-                "Base case failed. ${k - 1}-safety does not hold.", baseResult.model.toString())
+                "Base case failed. ${k-1}-safety does not hold. Counterexample: ${baseResult.model.toSortedMap()}")
+            return false
           }
           SatStatus.UNKNOWN -> {
             out.println("Base case could not be decided.")
-            return Crash("K-Induction: Base case at k = $k could not be decided.")
+            return false
           }
           SatStatus.PENDING -> {
             out.println("Error during SMT solving of base case.")
-            return Crash("K-Induction: Base case at k = $k exited with an error during solving.")
+            return false
           }
         }
 
@@ -117,40 +122,54 @@ class KInductionChecker(
         when (stepResult.status) {
           SatStatus.UNSAT -> {
             out.println("Inductive step passed. Program is safe by k-induction with k = $k.")
-            return Proof("Inductive step passed. Program is safe by k-induction with k = $k.")
+            return true
           }
           SatStatus.SAT ->
               out.println(
                   "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${stepResult.model.toSortedMap()}")
           SatStatus.UNKNOWN -> {
             out.println("Inductive step could not be decided.")
-            return Crash("K-Induction: Inductive step at k = $k could not be decided.")
+            return false
           }
           SatStatus.PENDING -> {
             out.println("Error during SMT solving of inductive step.")
-            return Crash(
-                "K-Induction: Inductive step at k = $k exited with an error during solving.")
+            return false
           }
         }
       }
-      return NoResult("Could not prove safety up to k = $kBound.")
+      return false
     } catch (e: RuntimeException) {
-      return Crash("K-Induction Checker crashed with exception: ${e.message}", e)
+      return false
     }
   }
 }
 
+/**
+ * K-Induction based safety checker with integrated Bounded Model Checking (BMC) for While*
+ * programs.
+ *
+ * @param context The program context containing the While* program to be checked.
+ * @param out The output stream for logging results and information.
+ * @param verbose Flag to enable verbose logging.
+ * @param useWhileInvariant Flag to indicate whether to use while loop invariants in the analysis.
+ * @param kBound The maximum value of k to be used in the k-induction process.
+ */
 class KInductionCheckerWithBMC(
-    override val context: Context,
-    override val out: Output = Output(),
-    override val verbose: Boolean = false,
+    val context: Context,
+    val out: Output = Output(),
+    val verbose: Boolean = false,
     useWhileInvariant: Boolean = false,
     val kBound: Int = 100
-) : VerificationApproach {
-  override val name: String = "K-Induction Checker with BMC"
+) {
   val transitionSystem = TransitionSystem(context, verbose, useWhileInvariant)
 
-  override fun check(): VerificationResult {
+  /**
+   * Performs the k-induction with BMC safety check.
+   *
+   * @return true if the program is proven safe, false if a counterexample is found or the check
+   *   could not be completed.
+   */
+  fun check(): Boolean {
     try {
       // Start with BMC 0:
       out.println("=== BMC 0 ===")
@@ -162,23 +181,20 @@ class KInductionCheckerWithBMC(
         SatStatus.SAT -> {
           out.println(
               "BMC 0 failed. 0-safety does not hold. Counterexample: ${bmc0Result.model.toSortedMap()}")
-          return Counterexample(
-              "BMC 0 failed. 0-safety does not hold.", bmc0Result.model.toString())
+          return false
         }
         SatStatus.UNKNOWN -> {
           out.println("BMC 0 could not be decided.")
-          return Crash("BMC: 0-safety could not be decided.")
+          return false
         }
         SatStatus.PENDING -> {
           out.println("Error during SMT solving of BMC 0.")
-          return Crash("BMC: 0-safety exited with an error during solving.")
+          return false
         }
       }
 
-      // ----------------------------------------
-
+      // Now do k-induction with BMC up to kBound
       var test: BooleanExpression = True
-
       for (k in 1..kBound) {
         out.println("=== K-Induction with BMC, k = $k ===")
         test =
@@ -196,15 +212,15 @@ class KInductionCheckerWithBMC(
           SatStatus.UNSAT -> out.println("BMC-$k / $k-induction basis passed.")
           SatStatus.SAT -> {
             out.println("BMC-$k failed. Counterexample: ${result.model.toSortedMap()}")
-            return Counterexample("BMC-$k failed.", result.model.toString())
+            return false
           }
           SatStatus.UNKNOWN -> {
             out.println("BMC / $k-induction basis could not be decided.")
-            return Crash("BMC / $k-induction basis at k = $k could not be decided.")
+            return false
           }
           SatStatus.PENDING -> {
             out.println("Error during SMT solving of BMC / $k-induction basis.")
-            return Crash("BMC / $k-induction basis at k = $k exited with an error during solving.")
+            return false
           }
         }
 
@@ -214,15 +230,15 @@ class KInductionCheckerWithBMC(
           SatStatus.SAT -> out.println("Depth check passed.")
           SatStatus.UNSAT -> {
             out.println("Depth check failed. Program may be shorter than k = $k.")
-            return Proof("Program is exhausted before k = $k.")
+            return true
           }
           SatStatus.UNKNOWN -> {
             out.println("Depth check at k = $k could not be decided.")
-            return Crash("BMC: Depth check at k = $k could not be decided.")
+            return true
           }
           SatStatus.PENDING -> {
             out.println("Error during SMT solving of depth check at k = $k.")
-            return Crash("BMC: Depth check at k = $k exited with an error during solving.")
+            return true
           }
         }
 
@@ -233,25 +249,24 @@ class KInductionCheckerWithBMC(
         when (result.status) {
           SatStatus.UNSAT -> {
             out.println("Inductive step passed. Program is safe by k-induction with k = $k.")
-            return Proof("Inductive step passed. Program is safe by k-induction with k = $k.")
+            return true
           }
           SatStatus.SAT ->
               out.println(
                   "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${result.model.toSortedMap()}")
           SatStatus.UNKNOWN -> {
             out.println("Inductive step could not be decided.")
-            return Crash("K-Induction: Inductive step at k = $k could not be decided.")
+            return false
           }
           SatStatus.PENDING -> {
             out.println("Error during SMT solving of inductive step.")
-            return Crash(
-                "K-Induction: Inductive step at k = $k exited with an error during solving.")
+            return false
           }
         }
       }
-      return NoResult("Could not prove safety up to k = $kBound.")
+      return false
     } catch (e: RuntimeException) {
-      return Crash("K-Induction with BMC Checker crashed with exception: ${e.message}", e)
+      return false
     }
   }
 }
