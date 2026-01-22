@@ -47,6 +47,7 @@ class BMCSafetyChecker(
 
   /**
    * The function that performs the BMC safety check.
+   *
    * @return `true` if a counterexample is found (safety is violated), `false` otherwise.
    */
   fun check(): Boolean {
