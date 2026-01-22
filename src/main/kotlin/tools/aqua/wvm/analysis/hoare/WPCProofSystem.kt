@@ -20,19 +20,16 @@ package tools.aqua.wvm.analysis.hoare
 
 import java.math.BigInteger
 import tools.aqua.konstraints.smt.SatStatus
-import tools.aqua.wvm.analysis.VerificationApproach
-import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
 import tools.aqua.wvm.machine.Scope
 
 class WPCProofSystem(
-    override val context: Context,
-    override val out: Output = Output(),
-    override val verbose: Boolean = false,
-) : VerificationApproach {
-  override val name: String = "WPC Proof System"
+    val context: Context,
+    val out: Output = Output(),
+    val verbose: Boolean = false,
+) {
   private var uniqueId = 0
 
   private fun vcgen(
@@ -335,11 +332,7 @@ class WPCProofSystem(
     return newPre
   }
 
-  fun proof(): Boolean { // For backwards compatibility
-    return check() is VerificationResult.Proof
-  }
-
-  override fun check(): VerificationResult {
+  fun proof(): Boolean {
     val pre = augment(context.pre, context.scope)
     val (_, vcs) = vcgen(pre, context.program, prepare(context.post))
     out.println("==== generating verification conditions: ====")
@@ -367,11 +360,6 @@ class WPCProofSystem(
     }
     out.println("=============================================")
     out.println("The proof was ${if (success) "" else "not "}successful.")
-    return when (success) {
-      true -> VerificationResult.Proof("All verification conditions were successfully proven.")
-      false ->
-          VerificationResult.NoResult(
-              "At least one verification condition could not be proven. But might still be safe.")
-    }
+    return success
   }
 }

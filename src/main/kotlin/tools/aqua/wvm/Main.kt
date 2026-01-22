@@ -105,7 +105,7 @@ class While : CliktCommand() {
         println("=========== Running proof system: ===========")
         val out = Output()
         val wps = WPCProofSystem(context, out)
-        val result = wps.check()
+        val result = wps.proof()
         println("# Safe: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
