@@ -25,8 +25,6 @@ import com.github.ajalt.clikt.parameters.options.option
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
-import tools.aqua.konstraints.smt.IllegalSymbolException
-import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
@@ -119,7 +117,7 @@ class While : CliktCommand() {
         val out = Output()
         val bmcKIndChecker = KInductionCheckerWithBMC(context, out, verbose, useWhileInvariant)
         val result = bmcKIndChecker.check()
-        println("# Safe: $result")
+        println("# Counterexample found: $result")
         println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
         SMTSolver.resetCallCounters()
         println("=============================================")
