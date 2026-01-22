@@ -79,9 +79,9 @@ class BMCSafetyChecker(
               })
       when (result.status) {
         SatStatus.UNSAT -> {} // Continue checking
-        SatStatus.SAT -> true
-        SatStatus.UNKNOWN -> false
-        SatStatus.PENDING -> false
+        SatStatus.SAT -> return true
+        SatStatus.UNKNOWN -> return false
+        SatStatus.PENDING -> return false
       }
     }
     return false
