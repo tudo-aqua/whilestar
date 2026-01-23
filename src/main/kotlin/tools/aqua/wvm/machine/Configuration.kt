@@ -23,14 +23,11 @@ import tools.aqua.wvm.language.*
 data class Configuration(
     val statements: SequenceOfStatements,
     val scope: Scope,
-    val memory: Memory<ArithmeticExpression>,
-    val error: Boolean = false,
-    val pathConstraint: BooleanExpression,
-    val booleanEvaluation: Boolean = false
+    val memory: Memory,
+    val error: Boolean = false
 ) {
 
   fun isFinal() = statements.isExhausted()
 
-  override fun toString(): String =
-      "${memory.toString()} ${if (error) "in error configuration " else ""}under $pathConstraint"
+  override fun toString(): String = memory.toString()
 }

@@ -58,13 +58,12 @@ class SMTSolver {
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
-        is NamedArray ->
-            if (!this.wpcMode) {
-              if (!vars.containsKey(expr.name)) {
-                vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
-              }
-              UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
-            } else throw Exception("oh no")
+        is NamedArray -> {
+          if (!vars.containsKey(expr.name)) {
+            vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
+          }
+          UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+        }
         is ArrayRead ->
             ArraySelect(
                 asKonstraint(expr.array) as Expression<ArraySort<IntSort, IntSort>>,
