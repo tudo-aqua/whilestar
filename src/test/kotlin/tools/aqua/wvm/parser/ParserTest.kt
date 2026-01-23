@@ -42,7 +42,7 @@ code:
   y := 0;
 """)
     println(ctx)
-    ctx.execute(true, symbolic = false)
+    ctx.execute(true)
     // println(Json.encodeToString(ctx.cfg))
   }
 }
