@@ -1,2 +1,0 @@
-sv-benchmarks-c/array-cav/array_doub_access_init_const_true.w SvBenchmarksC_ArrayCav_ArrayDoubAccessInitConst true array,loop,assert
-sv-benchmarks-c/array-cav/array_doub_access_init_const_false.w SvBenchmarksC_ArrayCav_ArrayDoubAccessInitConst false array,loop,assert
