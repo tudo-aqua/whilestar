@@ -396,6 +396,28 @@ object AnyArray : ArrayExpression {
   override fun toString(): String = "M"
 }
 
+object AnyArrayPrimed : ArrayExpression {
+  override fun evaluate(
+      scope: Scope,
+      memory: Memory,
+  ): Application<Int> {
+    throw Exception("array is not meant to be evaluated.")
+  }
+
+  override fun toString(): String = "M'"
+}
+
+data class NamedArray(val name: String) : ArrayExpression {
+  override fun evaluate(
+      scope: Scope,
+      memory: Memory,
+  ): Application<Int> {
+    throw Exception("array is not meant to be evaluated.")
+  }
+
+  override fun toString(): String = "$name"
+}
+
 data class ArrayRead(val array: ArrayExpression, val index: ArithmeticExpression) :
     ArrayExpression {
   override fun evaluate(scope: Scope, memory: Memory): Application<Int> {
@@ -415,4 +437,64 @@ data class ArrayWrite(
   }
 
   override fun toString(): String = "$array<$index <| $value>"
+}
+
+// --------------------------------------------------------------------
+// Util
+
+fun AddressExpression.renameVariables(renames: Map<String, String>): AddressExpression {
+  return when (this) {
+    is Variable -> renames[name]?.let { Variable(it) } ?: this
+    is DeRef -> DeRef(reference.renameVariables(renames))
+    is ArrayAccess ->
+        ArrayAccess(array.renameVariables(renames) as ValAtAddr, index.renameVariables(renames))
+    else -> (this as ArrayExpression).renameVariables(renames)
+  }
+}
+
+fun ArithmeticExpression.renameVariables(renames: Map<String, String>): ArithmeticExpression {
+  return when (this) {
+    is Add -> Add(left.renameVariables(renames), right.renameVariables(renames))
+    is Sub -> Sub(left.renameVariables(renames), right.renameVariables(renames))
+    is Mul -> Mul(left.renameVariables(renames), right.renameVariables(renames))
+    is Div -> Div(left.renameVariables(renames), right.renameVariables(renames))
+    is Rem -> Rem(left.renameVariables(renames), right.renameVariables(renames))
+    is UnaryMinus -> UnaryMinus(negated.renameVariables(renames))
+    is ValAtAddr -> ValAtAddr(addr.renameVariables(renames))
+    is VarAddress -> VarAddress(variable.renameVariables(renames) as Variable)
+    is NumericLiteral -> this
+  }
+}
+
+fun BooleanExpression.renameVariables(renames: Map<String, String>): BooleanExpression {
+  return when (this) {
+    is Eq -> Eq(left.renameVariables(renames), right.renameVariables(renames), nesting)
+    is Gt -> Gt(left.renameVariables(renames), right.renameVariables(renames))
+    is Gte -> Gte(left.renameVariables(renames), right.renameVariables(renames))
+    is Lt -> Lt(left.renameVariables(renames), right.renameVariables(renames))
+    is Lte -> Lte(left.renameVariables(renames), right.renameVariables(renames))
+    is And -> And(left.renameVariables(renames), right.renameVariables(renames))
+    is Or -> Or(left.renameVariables(renames), right.renameVariables(renames))
+    is Imply -> Imply(left.renameVariables(renames), right.renameVariables(renames))
+    is Equiv -> Equiv(left.renameVariables(renames), right.renameVariables(renames))
+    is Not -> Not(negated.renameVariables(renames))
+    is Forall ->
+        Forall(boundVar.renameVariables(renames) as Variable, expression.renameVariables(renames))
+    True -> this
+    False -> this
+  }
+}
+
+fun ArrayExpression.renameVariables(renames: Map<String, String>): ArrayExpression {
+  return when (this) {
+    is AnyArray -> if (renames.containsKey("M")) NamedArray(renames["M"]!!) else this
+    is AnyArrayPrimed -> if (renames.containsKey("M'")) NamedArray(renames["M'"]!!) else this
+    is NamedArray -> if (renames.containsKey(name)) NamedArray(renames[name]!!) else this
+    is ArrayRead -> ArrayRead(array.renameVariables(renames), index.renameVariables(renames))
+    is ArrayWrite ->
+        ArrayWrite(
+            array.renameVariables(renames),
+            index.renameVariables(renames),
+            value.renameVariables(renames))
+  }
 }

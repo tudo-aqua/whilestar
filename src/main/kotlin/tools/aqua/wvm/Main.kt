@@ -33,7 +33,11 @@ import tools.aqua.wvm.analysis.dataflow.LVAnalysis
 import tools.aqua.wvm.analysis.dataflow.RDAnalysis
 import tools.aqua.wvm.analysis.dataflow.TaintAnalysis
 import tools.aqua.wvm.analysis.dataflow.cfg
+import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
+import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
+import tools.aqua.wvm.analysis.inductiveVerification.KInductionChecker
+import tools.aqua.wvm.analysis.inductiveVerification.KInductionCheckerWithBMC
 import tools.aqua.wvm.analysis.typesystem.TypeChecker
 import tools.aqua.wvm.language.SequenceOfStatements
 import tools.aqua.wvm.machine.Output
@@ -61,6 +65,13 @@ class While : CliktCommand() {
   private val proof: Boolean by
       option("-p", "--proof", help = "proof (instead of execution)").flag()
 
+  private val bmc: Boolean by option("-b", "--bmc", help = "run bmc checker").flag()
+
+  private val kInd: Boolean by option("-k", "--kind", help = "run k-induction checker").flag()
+
+  private val useWhileInvariant by
+      option("--kInd-inv", help = "use while invariant in k-induction").flag()
+
   private val externalInput: Boolean by
       option("-i", "--input", help = "enables input for external variables").flag()
 
@@ -74,7 +85,9 @@ class While : CliktCommand() {
         !liveness &&
         !reachability &&
         !reachingdefinitions &&
-        !taint) {
+        !taint &&
+        !bmc &&
+        !kInd) {
       echoFormattedHelp()
       exitProcess(1)
     }
@@ -110,6 +123,39 @@ class While : CliktCommand() {
         val out = Output()
         val wps = WPCProofSystem(context, out)
         wps.proof()
+      }
+
+      if (bmc && kInd) {
+        println("======= Running BMC with k-induction =======")
+        val out = Output()
+        val bmcKIndChecker = KInductionCheckerWithBMC(context, out, verbose, useWhileInvariant)
+        val result = bmcKIndChecker.check()
+        println("# Safe: $result")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
+        println("=============================================")
+      }
+
+      if (bmc && !kInd) {
+        println("=========== Running BMC checker: ===========")
+        val out = Output()
+        val bmcChecker = BMCSafetyChecker(context, out, verbose)
+        val result = bmcChecker.check()
+        println("# Counterexample found: $result")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
+        println("=============================================")
+      }
+
+      if (kInd && !bmc) {
+        println("======== Running k-induction checker: =======")
+        val out = Output()
+        val kIndChecker = KInductionChecker(context, out, verbose, useWhileInvariant)
+        val result = kIndChecker.check()
+        println("# Safe: $result")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
+        println("=============================================")
       }
 
       val cfg by lazy { cfg(context.program) }

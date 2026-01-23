@@ -44,6 +44,16 @@ class SMTSolver {
     vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
   }
 
+  companion object {
+    var numberOfSolveCalls = 0
+    val numberOfSMTCalls
+      get() = numberOfSolveCalls
+
+    fun resetCallCounters() {
+      numberOfSolveCalls = 0
+    }
+  }
+
   @Suppress("UNCHECKED_CAST")
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
@@ -115,12 +125,12 @@ class SMTSolver {
     var commands = vars.values + Assert(konstraint) + CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
     var model = emptyMap<String, String>()
-    smtProgram.solve()
+    smtProgram.solve().also { numberOfSolveCalls++ }
     if (smtProgram.status == SatStatus.SAT) {
       try {
         commands += GetModel
         val progForModel = DefaultSMTProgram(commands, ctx)
-        progForModel.solve()
+        progForModel.solve().also { numberOfSolveCalls++ }
         model =
             progForModel.model?.definitions?.associate { it ->
               (it.name.toString() to it.term.toString())
