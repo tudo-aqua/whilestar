@@ -1,0 +1,115 @@
+array/dyn-mem.w Array_DynMem true array
+array/ex1.w Array_Ex1 true array
+array/ex2.w Array_Ex2 true array
+array/ex3.w Array_Ex3 false array
+array/ex4.w Array_Ex4 true array
+array/nesting.w Array_Nesting true array
+array/selectionsort.w Array_Selectionsort true array
+array/size.w Array_Size true array
+assert/ex1.w Assert_Ex1 assert false
+assert/ex2.w Assert_Ex2 assert true
+assert/ex3.w Assert_Ex3 assert true
+assignment/ex1.w Assignment_Ex1 true
+assignment/ex2.w Assignment_Ex2 true
+assignment/ex3.w Assignment_Ex3 true
+assignment/ex3-false.w Assignment_Ex3False false
+assignment/ex4.w Assignment_Ex4 true
+gpdr-examples/ex1.w GpdrExamples_Ex1 true
+gpdr-examples/ex2.w GpdrExamples_Ex2 false
+gpdr-examples/ex3-infinite.w GpdrExamples_Ex3Infinite true
+gpdr-examples/ex3.w GpdrExamples_Ex3 true
+havoc/ex1.w Havoc_Ex1 true havoc
+havoc/ex2.w Havoc_Ex2 false havoc
+hoare/ex1.w Hoare_Ex1 true
+hoare/ex2.w Hoare_Ex2 true
+if/ex1.w If_Ex1 true
+if/ex2.w If_Ex2 true
+pointer/ex1.w Pointer_Ex1 true pointer
+pointer/ex2.w Pointer_Ex2 true pointer
+pointer/ex3.w Pointer_Ex3 true pointer
+pointer/ex4.w Pointer_Ex4 false pointer
+pointer/ex5.w Pointer_Ex5 true pointer
+sv-benchmarks-java/algorithms/BellmanFord01.w SvBenchmarksJava_Algorithms_BellmanFord01 true array,loop,havoc,assert
+sv-benchmarks-java/algorithms/insertionsort.w SvBenchmarksJava_Algorithms_Insertionsort true array,loop
+sv-benchmarks-java/jbmc-regression/array2.w SvBenchmarksJava_JbmcRegression_Array2 true array,assert,havoc
+sv-benchmarks-java/jbmc-regression/assert1.w SvBenchmarksJava_JbmcRegression_Assert1 true havoc,assert
+sv-benchmarks-java/jbmc-regression/assert2.w SvBenchmarksJava_JbmcRegression_Assert2 true havoc,assert
+sv-benchmarks-java/jbmc-regression/assert3.w SvBenchmarksJava_JbmcRegression_Assert3 true havoc,assert
+sv-benchmarks-java/jbmc-regression/assert4.w SvBenchmarksJava_JbmcRegression_Assert4 true havoc,assert
+sv-benchmarks-java/jbmc-regression/assert5.w SvBenchmarksJava_JbmcRegression_Assert5 true havoc,assert
+sv-benchmarks-java/jbmc-regression/assert6.w SvBenchmarksJava_JbmcRegression_Assert6 true havoc,assert
+sv-benchmarks-java/jbmc-regression/iarith1.w SvBenchmarksJava_JbmcRegression_Iarith1 true division
+sv-benchmarks-java/jbmc-regression/if_icmp1.w SvBenchmarksJava_JbmcRegression_IfIcmp1 true havoc,assert
+sv-benchmarks-java/jbmc-regression/ifxx1.w SvBenchmarksJava_JbmcRegression_Ifxx1 true havoc,assert
+sv-benchmarks-java/jdart-regression/array-iteration1.w SvBenchmarksJava_JdartRegression_ArrayIteration1 false array,havoc,assert
+sv-benchmarks-java/jpf-regression/ExSymExe1_false.w SvBenchmarksJava_JpfRegression_ExSymExe1 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe1_true.w SvBenchmarksJava_JpfRegression_ExSymExe1 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe2_false.w SvBenchmarksJava_JpfRegression_ExSymExe2 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe2_true.w SvBenchmarksJava_JpfRegression_ExSymExe2 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe3_false.w SvBenchmarksJava_JpfRegression_ExSymExe3 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe3_true.w SvBenchmarksJava_JpfRegression_ExSymExe3 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe4_false.w SvBenchmarksJava_JpfRegression_ExSymExe4 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe4_true.w SvBenchmarksJava_JpfRegression_ExSymExe4 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe5_false.w SvBenchmarksJava_JpfRegression_ExSymExe5 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe5_true.w SvBenchmarksJava_JpfRegression_ExSymExe5 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe6_false.w SvBenchmarksJava_JpfRegression_ExSymExe6 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe6_true.w SvBenchmarksJava_JpfRegression_ExSymExe6 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe7_false.w SvBenchmarksJava_JpfRegression_ExSymExe7 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe7_true.w SvBenchmarksJava_JpfRegression_ExSymExe7 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe8_false.w SvBenchmarksJava_JpfRegression_ExSymExe8 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe8_true.w SvBenchmarksJava_JpfRegression_ExSymExe8 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe9_false.w SvBenchmarksJava_JpfRegression_ExSymExe9 false assert
+sv-benchmarks-java/jpf-regression/ExSymExe9_true.w SvBenchmarksJava_JpfRegression_ExSymExe9 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe10_false.w SvBenchmarksJava_JpfRegression_ExSymExe10 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe10_true.w SvBenchmarksJava_JpfRegression_ExSymExe10 true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe11_false.w SvBenchmarksJava_JpfRegression_ExSymExe11 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe11_true.w SvBenchmarksJava_JpfRegression_ExSymExe11 true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe12_false.w SvBenchmarksJava_JpfRegression_ExSymExe12 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe12_true.w SvBenchmarksJava_JpfRegression_ExSymExe12 true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe13_false.w SvBenchmarksJava_JpfRegression_ExSymExe13 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe13_true.w SvBenchmarksJava_JpfRegression_ExSymExe13 true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe14_false.w SvBenchmarksJava_JpfRegression_ExSymExe14 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe14_true.w SvBenchmarksJava_JpfRegression_ExSymExe14 true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe15_false.w SvBenchmarksJava_JpfRegression_ExSymExe15 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe15_true.w SvBenchmarksJava_JpfRegression_ExSymExe15 true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe16_false.w SvBenchmarksJava_JpfRegression_ExSymExe16 false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExe16_true.w SvBenchmarksJava_JpfRegression_ExSymExe16 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe17_false.w SvBenchmarksJava_JpfRegression_ExSymExe17 false assert
+sv-benchmarks-java/jpf-regression/ExSymExe17_true.w SvBenchmarksJava_JpfRegression_ExSymExe17 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe18_false.w SvBenchmarksJava_JpfRegression_ExSymExe18 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe18_true.w SvBenchmarksJava_JpfRegression_ExSymExe18 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe19_false.w SvBenchmarksJava_JpfRegression_ExSymExe19 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe19_true.w SvBenchmarksJava_JpfRegression_ExSymExe19 true assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe20_false.w SvBenchmarksJava_JpfRegression_ExSymExe20 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe20_true.w SvBenchmarksJava_JpfRegression_ExSymExe20 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe21_false.w SvBenchmarksJava_JpfRegression_ExSymExe21 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe21_true.w SvBenchmarksJava_JpfRegression_ExSymExe21 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe25_false.w SvBenchmarksJava_JpfRegression_ExSymExe25 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe25_true.w SvBenchmarksJava_JpfRegression_ExSymExe25 true assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe26_false.w SvBenchmarksJava_JpfRegression_ExSymExe26 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe26_true.w SvBenchmarksJava_JpfRegression_ExSymExe26 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe27_false.w SvBenchmarksJava_JpfRegression_ExSymExe27 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe27_true.w SvBenchmarksJava_JpfRegression_ExSymExe27 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe28_false.w SvBenchmarksJava_JpfRegression_ExSymExe28 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe28_true.w SvBenchmarksJava_JpfRegression_ExSymExe28 true assert
+sv-benchmarks-java/jpf-regression/ExSymExe29_false.w SvBenchmarksJava_JpfRegression_ExSymExe29 false assert,haovc
+sv-benchmarks-java/jpf-regression/ExSymExe29_true.w SvBenchmarksJava_JpfRegression_ExSymExe29 true assert
+sv-benchmarks-java/jpf-regression/ExSymExeArrays_false.w SvBenchmarksJava_JpfRegression_ExSymExeArrays false array,assert
+sv-benchmarks-java/jpf-regression/ExSymExeArrays_true.w SvBenchmarksJava_JpfRegression_ExSymExeArrays true array,assert
+sv-benchmarks-java/jpf-regression/ExSymExeResearch_false.w SvBenchmarksJava_JpfRegression_ExSymExeResearch false havoc
+sv-benchmarks-java/jpf-regression/ExSymExeResearch_true.w SvBenchmarksJava_JpfRegression_ExSymExeResearch true haovc
+sv-benchmarks-java/jpf-regression/ExSymExeSimple_false.w SvBenchmarksJava_JpfRegression_ExSymExeSimple false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExeSimple_true.w SvBenchmarksJava_JpfRegression_ExSymExeSimple true assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExeTestAssigment_false.w SvBenchmarksJava_JpfRegression_ExSymExeTestAssigment false assert,havoc
+sv-benchmarks-java/jpf-regression/ExSymExeTestAssigment_true.w SvBenchmarksJava_JpfRegression_ExSymExeTestAssigment true assert,havoc
+swap/ex1.w Swap_Ex1 true swap
+swap/ex2.w Swap_Ex2 false swap
+thesis-examples/bmc-example.w ThesisExamples_BmcExample false loop
+while/ackermann.w While_Ackermann true array,loop
+while/collatz.w While_Collatz true loop,havoc
+while/ex1.w While_Ex1 true loop,invariant
+while/ex2.w While_Ex2 true loop,invariant
+while/ex3.w While_Ex3 true loop
+while/ex4.w While_Ex4 true loop,invariant,assert
+while/increment.w While_Increment true loop,invariant
+while/sum.w While_Sum true loop,invariant,assert

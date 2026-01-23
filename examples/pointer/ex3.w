@@ -7,5 +7,6 @@ code:
     print "Pointers are equal";
   } else {
     print "Pointers are unequal";
+    assert (false);
   };
 post: (true)

@@ -15,6 +15,7 @@ code:
   print "y = ", y;
   if(x == y) {
     print "Pointers are equal";
+    assert (false);
   } else {
     print "Pointers are unequal";
   };
@@ -22,5 +23,6 @@ code:
     print "Values are equal";
   } else {
     print "Values are unequal";
+    assert (false);
   };
 post: (true)

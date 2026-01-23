@@ -4,13 +4,14 @@ vars:
   int i2;
   int min;
 code:
+  print "Starting: ";
   i1 := 0;
   while(i1<10) {
     extern feld[i1] 0..100;
-    print "", feld[i1];
+    print "gen: ", feld[i1];
     i1 := i1 + 1;
   };
-  print "============";
+  print "Sorting: ";
   i1 := 0;
   while(i1 < 10) {
     min := i1;
@@ -27,6 +28,7 @@ code:
   };
   i1 := 0;
   while(i1 < 10) {
-    print "", feld[i1]; 
+    print "out: ", feld[i1]; 
     i1 := i1 + 1;
   };
+post: (feld[0] <= feld[1])
