@@ -103,12 +103,13 @@ class While : CliktCommand() {
         println("=============================================")
         println(context.scope)
         println(SequenceOfStatements(context.program).toIndentedString(""))
-        println(context.pre)
-        println(context.post)
+        println("Pre-Condition: " + context.pre)
+        println("Post-Condition: " + context.post)
         println("=============================================")
       }
 
       if (typecheck) {
+        println("=========== Running type checker: ===========")
         println("==== generating type correctness proof: =====")
         val checker = TypeChecker(context.scope)
         // println(SequenceOfStatements(context.program))
@@ -120,9 +121,14 @@ class While : CliktCommand() {
       }
 
       if (proof) {
+        println("=========== Running proof system: ===========")
         val out = Output()
         val wps = WPCProofSystem(context, out)
-        wps.proof()
+        val result = wps.proof()
+        println("# Safe: $result")
+        println("# NumberOfSMTCalls: ${SMTSolver.numberOfSMTCalls}")
+        SMTSolver.resetCallCounters()
+        println("=============================================")
       }
 
       if (bmc && kInd) {
