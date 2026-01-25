@@ -41,6 +41,12 @@ typealias AnalysisLog<F> = List<Marking<F>>
 
 interface Fact
 
+interface AnalysisGenKill<F : Fact> {
+  fun gen(node: CFGNode<*>, inflow: Set<F>): Set<String>
+
+  fun kill(node: CFGNode<*>, inflow: Set<F>): Set<String>
+}
+
 fun interface Kill<F : Fact, T : Statement> {
   fun kill(fact: F, node: CFGNode<T>): Boolean
 }
@@ -77,6 +83,9 @@ data class DataflowAnalysis<F : Fact>(
     val printKill: Kill<F, Print> = Kill { _, _ -> false },
     val assertionGen: Gen<F, Assertion> = Gen { _, _ -> emptySet() },
     val assertionKill: Kill<F, Assertion> = Kill { _, _ -> false },
+    val factSetFormatter: (Set<F>) -> String = {
+      it.map { f -> f.toString() }.sorted().joinToString(", ", "{", "}")
+    },
     private val check: Check<F> = Check { _, _ -> "ERROR: Check not available for this analysis" }
 ) {
 

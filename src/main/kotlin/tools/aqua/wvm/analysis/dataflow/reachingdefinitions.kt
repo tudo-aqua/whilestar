@@ -100,8 +100,8 @@ val RDAnalysis =
               }
             })
 
-object RDGenKill {
-  fun gen(node: CFGNode<*>): Set<String> =
+object RDGenKill : AnalysisGenKill<RDFact> {
+  override fun gen(node: CFGNode<*>, inflow: Set<RDFact>): Set<String> =
       when (val stmt = node.stmt) {
         is Assignment -> varsInExpr(stmt.addr).map { RDWriteFact(it, node).toString() }.toSet()
         is Swap ->
@@ -112,7 +112,7 @@ object RDGenKill {
         else -> emptySet()
       }
 
-  fun kill(node: CFGNode<*>): Set<String> =
+  override fun kill(node: CFGNode<*>, inflow: Set<RDFact>): Set<String> =
       when (val stmt = node.stmt) {
         is Assignment -> varsInExpr(stmt.addr).map { "($it, *)" }.toSet()
         is Swap -> (varsInExpr(stmt.left) + varsInExpr(stmt.right)).map { "($it, *)" }.toSet()

@@ -28,7 +28,7 @@ data class TaintFact(val varname: String) : Fact {
 }
 
 val TaintAnalysis =
-    DataflowAnalysis(
+    DataflowAnalysis<TaintFact>(
         direction = Direction.Forward,
         type = AnalysisType.May,
         initialization = { cfg, _ ->
@@ -84,8 +84,8 @@ val TaintAnalysis =
               }
             })
 
-object TaintGenKill {
-  fun gen(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
+object TaintGenKill : AnalysisGenKill<TaintFact> {
+  override fun gen(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
       when (val stmt = node.stmt) {
         is Havoc -> varsInExpr(stmt.addr)
         is Assignment -> {
@@ -110,7 +110,7 @@ object TaintGenKill {
         else -> emptySet()
       }
 
-  fun kill(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
+  override fun kill(node: CFGNode<*>, inflow: Set<TaintFact>): Set<String> =
       when (val stmt = node.stmt) {
         is Assignment -> varsInExpr(stmt.addr)
         is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)

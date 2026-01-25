@@ -18,7 +18,7 @@
 
 package tools.aqua.wvm.analysis.dataflow
 
-import main.kotlin.tools.aqua.wvm.analysis.dataflow.Reachable
+import main.kotlin.tools.aqua.wvm.analysis.dataflow.ReachableAnalysis
 import tools.aqua.wvm.language.*
 
 sealed interface CFG {
@@ -207,21 +207,24 @@ fun cfgToMermaid(cfg: CFG, color: List<Int> = List(cfg.nodes().size) { x -> 0 })
   }
 }
 
-fun extractColor(cfg: CFG, log: Marking<Reachable>): List<Int> {
+fun <F : Fact> extractColor(cfg: CFG, log: Marking<F>, analysis: DataflowAnalysis<F>): List<Int> {
   var colorList: MutableList<Int> = List(log.size) { 0 }.toMutableList()
 
-  log.forEach { node, inout ->
-    colorList[cfg.idOf(node)] =
-        if (inout.first.isNotEmpty()) {
-          if (inout.second.isNotEmpty()) {
-            1
-          } else {
-            2
-          }
-        } else {
-          3
+  when (analysis) {
+    ReachableAnalysis ->
+        log.forEach { node, inout ->
+          colorList[cfg.idOf(node)] =
+              if (inout.first.isNotEmpty()) {
+                if (inout.second.isNotEmpty()) {
+                  1
+                } else {
+                  2
+                }
+              } else {
+                3
+              }
         }
+    else -> {}
   }
-
   return colorList
 }

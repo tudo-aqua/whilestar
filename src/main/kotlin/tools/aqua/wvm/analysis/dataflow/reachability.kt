@@ -40,6 +40,7 @@ val ReachableAnalysis =
           initialMarking
         },
         failKill = { _, _ -> true },
+        factSetFormatter = { set -> if (set.isNotEmpty()) "reachable" else "unreachable" },
         check =
             Check { cfg, marking ->
               val unreachableNodes = marking.filter { (_, inOut) -> inOut.first.isEmpty() }.keys
