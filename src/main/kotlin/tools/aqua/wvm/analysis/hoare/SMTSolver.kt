@@ -125,10 +125,10 @@ class SMTSolver {
             progForModel.model?.definitions?.associate { it ->
               (it.name.toString() to it.term.toString())
             } ?: emptyMap()
-      } catch (ex: Exception) {
+      } catch (e: Exception) {
         // todo: produce some output
         // ex.printStackTrace()
-        println("oops.")
+        println("Error: ${e.message}")
       }
     }
     return Result(smtProgram.status, model)
