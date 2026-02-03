@@ -48,6 +48,34 @@ class TransitionSystem(
 
   data class LocationID(var id: Int)
 
+  data class TSEdge(
+      var from: Int,
+      var to: Int,
+      val stmt: Statement,
+      var transition: BooleanExpression,
+      val final: Boolean = false,
+  )
+
+  val tsEdge = mutableListOf<TSEdge>()
+
+  private fun changeEdgeTarget(
+      oldTarget: Int,
+      newTarget: Int,
+      transition: BooleanExpression
+  ) {
+    tsEdge
+        .filter { it.to == oldTarget && it.from == (oldTarget - 1) && !it.final }
+        .forEach {
+          it.to = newTarget
+          it.transition = transition
+        }
+  }
+
+  val frameCondition: BooleanExpression =
+      vars
+          .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+          .reduceOrDefault(True) { acc, next -> And(acc, next) }
+
   val locId = LocationID(0)
   var uniqueExternVarID: Int = 0
 
@@ -63,7 +91,6 @@ class TransitionSystem(
 
     // Transition relation
     transitions = context.program.asTransition(locId)
-    if (verbose) println("Transition relation: $transitions")
 
     // Invariant: (Not at error location) and (Either not at the end or the postcondition holds)
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
@@ -212,6 +239,7 @@ class TransitionSystem(
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) })
+    tsEdge.add(TSEdge(startId, locId.id, this, ifTrueTransition))
     var thenBody = this.thenBlock.asTransition(locId)
     val lastIdThenBody = locId.id
     val ifFalseTransition =
@@ -223,11 +251,16 @@ class TransitionSystem(
             vars
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) })
+    tsEdge.add(TSEdge(startId, locId.id, this, ifFalseTransition, true))
     val elseBody = this.elseBlock.asTransition(locId)
     // Changing last location id from the when-branch (currently in locId) to the last location-id
     // from the else-branch
     ifTrueTransition = ifTrueTransition.changeLocation(lastIdThenBody, locId.id)
     thenBody = thenBody.changeLocation(lastIdThenBody, locId.id)
+    changeEdgeTarget(
+        lastIdThenBody,
+        locId.id,
+        if (thenBody.toString() != "false") thenBody else ifTrueTransition)
     return combineMultipleTransitions(ifTrueTransition, thenBody, ifFalseTransition, elseBody)
   }
 
@@ -243,7 +276,9 @@ class TransitionSystem(
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
             if (useWhileInvariant) prepareOnMemory(this.invariant) else True)
+    tsEdge.add(TSEdge(startId, locId.id, this, whileTrueTransition))
     val loopBody = this.body.asTransition(locId).changeLocation(locId.id, startId)
+    changeEdgeTarget(locId.id, startId, loopBody)
     val whileFalseTransition =
         makeSingleTransition(
             Eq(ValAtAddr(Variable("loc")), NumericLiteral(startId.toBigInteger()), 0),
@@ -254,144 +289,158 @@ class TransitionSystem(
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
             if (useWhileInvariant) prepareOnMemory(this.invariant) else True)
+    tsEdge.add(TSEdge(startId, locId.id, this, loopBody))
     return combineMultipleTransitions(whileTrueTransition, loopBody, whileFalseTransition)
   }
 
   private fun Assignment.asTransition(locId: LocationID): BooleanExpression {
+    val startId = locId.id
     return makeSingleTransition(
-        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        Eq(
-            ValAtAddr(AnyArrayPrimed), // Memory after assignment
-            ValAtAddr(
-                ArrayWrite(
-                    AnyArray,
-                    when (this.addr) { // Addressing depending on type
-                      is Variable -> ValAtAddr(this.addr)
-                      is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference)))
-                      is ArrayAccess ->
-                          Add(
-                              ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
-                              prepareOnMemory(this.addr.index))
-                      else -> throw Exception("Unsupported address in Assignment.")
-                    },
-                    prepareOnMemory(this.expr))),
-            0),
-        vars
-            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) })
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            Eq(
+                ValAtAddr(AnyArrayPrimed), // Memory after assignment
+                ValAtAddr(
+                    ArrayWrite(
+                        AnyArray,
+                        when (this.addr) { // Addressing depending on type
+                          is Variable -> ValAtAddr(this.addr)
+                          is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference)))
+                          is ArrayAccess ->
+                              Add(
+                                  ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
+                                  prepareOnMemory(this.addr.index))
+                          else -> throw Exception("Unsupported address in Assignment.")
+                        },
+                        prepareOnMemory(this.expr))),
+                0),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
+        .also { tsEdge.add(TSEdge(startId, locId.id, this, it)) }
   }
 
   private fun Swap.asTransition(locId: LocationID): BooleanExpression {
+    val startId = locId.id
     return makeSingleTransition(
-        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        Eq(
-            ValAtAddr(AnyArrayPrimed), // Memory after swap
-            ValAtAddr(
-                ArrayWrite(
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            Eq(
+                ValAtAddr(AnyArrayPrimed), // Memory after swap
+                ValAtAddr(
                     ArrayWrite(
-                        AnyArray,
-                        when (this.left) { // Addressing of left depending on type
-                          is Variable -> ValAtAddr(this.left)
-                          is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.left.reference)))
+                        ArrayWrite(
+                            AnyArray,
+                            when (this.left) { // Addressing of left depending on type
+                              is Variable -> ValAtAddr(this.left)
+                              is DeRef ->
+                                  ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.left.reference)))
+                              is ArrayAccess ->
+                                  Add(
+                                      ValAtAddr(ArrayRead(AnyArray, this.left.array)),
+                                      prepareOnMemory(this.left.index))
+                              else -> throw Exception("Unsupported left address in Swap.")
+                            },
+                            prepareOnMemory(ValAtAddr(this.right))),
+                        when (this.right) { // Addressing of right depending on type
+                          is Variable -> ValAtAddr(this.right)
+                          is DeRef ->
+                              ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.right.reference)))
                           is ArrayAccess ->
                               Add(
-                                  ValAtAddr(ArrayRead(AnyArray, this.left.array)),
-                                  prepareOnMemory(this.left.index))
-                          else -> throw Exception("Unsupported left address in Swap.")
+                                  ValAtAddr(ArrayRead(AnyArray, this.right.array)),
+                                  prepareOnMemory(this.right.index))
+                          else -> throw Exception("Unsupported right address in Swap.")
                         },
-                        prepareOnMemory(ValAtAddr(this.right))),
-                    when (this.right) { // Addressing of right depending on type
-                      is Variable -> ValAtAddr(this.right)
-                      is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.right.reference)))
-                      is ArrayAccess ->
-                          Add(
-                              ValAtAddr(ArrayRead(AnyArray, this.right.array)),
-                              prepareOnMemory(this.right.index))
-                      else -> throw Exception("Unsupported right address in Swap.")
-                    },
-                    prepareOnMemory(ValAtAddr(this.left)))),
-            0),
-        vars
-            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) })
+                        prepareOnMemory(ValAtAddr(this.left)))),
+                0),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
+        .also { tsEdge.add(TSEdge(startId, locId.id, this, it)) }
   }
 
   private fun Assertion.asTransition(locId: LocationID): BooleanExpression {
     val startId = locId.id
     return combineMultipleTransitions(
-        makeSingleTransition( // Assertion holds
-            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-            prepareOnMemory(this.cond),
-            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
-            vars
-                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                .reduceOrDefault(True) { acc, next -> And(acc, next) }),
-        makeSingleTransition( // Assertion violated, -1 indicates the error location
-            Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
-            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
-            Not(prepareOnMemory(this.cond)),
-            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
-            vars
-                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-                .reduceOrDefault(True) { acc, next -> And(acc, next) }))
+            makeSingleTransition( // Assertion holds
+                Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+                prepareOnMemory(this.cond),
+                Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
+                vars
+                    .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                    .reduceOrDefault(True) { acc, next -> And(acc, next) }),
+            makeSingleTransition( // Assertion violated, -1 indicates the error location
+                Eq(ValAtAddr(Variable("loc")), NumericLiteral((startId).toBigInteger()), 0),
+                Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
+                Not(prepareOnMemory(this.cond)),
+                Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
+                vars
+                    .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                    .reduceOrDefault(True) { acc, next -> And(acc, next) }))
+        .also { tsEdge.add(TSEdge(startId, locId.id, this, it)) }
   }
 
   @Suppress("UnusedReceiverParameter")
   private fun Print.asTransition(locId: LocationID): BooleanExpression {
     if (skipPrints) return False // Skip print statements in the transition system as
     // they do not affect program state
+    val startId = locId.id
     return makeSingleTransition(
-        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
-        vars
-            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) })
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
+        .also { tsEdge.add(TSEdge(startId, locId.id, this, it)) }
   }
 
   private fun Havoc.asTransition(locId: LocationID): BooleanExpression {
     // This is a new bound variable. It could be removed, but than the code below becomes longer.
     // (Eq-Block for both Lte and Lt)
     val boundVar = Variable("ext_${uniqueExternVarID++}_ext")
+    val startId = locId.id
     return makeSingleTransition(
-        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
-        Lte(NumericLiteral(this.lower), ValAtAddr(boundVar)),
-        Lt(ValAtAddr(boundVar), NumericLiteral(this.upper)),
-        Eq(
-            ValAtAddr(AnyArrayPrimed),
-            ValAtAddr(
-                ArrayWrite(
-                    AnyArray,
-                    when (this.addr) { // Addressing depending on type
-                      is Variable -> ValAtAddr(this.addr)
-                      is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference)))
-                      is ArrayAccess ->
-                          Add(
-                              ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
-                              prepareOnMemory(this.addr.index))
-                      else -> throw Exception("Unsupported address in Havoc.")
-                    },
-                    ValAtAddr(boundVar))),
-            0),
-        vars
-            .filter { it != boundVar.name }
-            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) })
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((locId.id).toBigInteger()), 0),
+            Lte(NumericLiteral(this.lower), ValAtAddr(boundVar)),
+            Lt(ValAtAddr(boundVar), NumericLiteral(this.upper)),
+            Eq(
+                ValAtAddr(AnyArrayPrimed),
+                ValAtAddr(
+                    ArrayWrite(
+                        AnyArray,
+                        when (this.addr) { // Addressing depending on type
+                          is Variable -> ValAtAddr(this.addr)
+                          is DeRef -> ValAtAddr(ArrayRead(AnyArray, ValAtAddr(this.addr.reference)))
+                          is ArrayAccess ->
+                              Add(
+                                  ValAtAddr(ArrayRead(AnyArray, this.addr.array)),
+                                  prepareOnMemory(this.addr.index))
+                          else -> throw Exception("Unsupported address in Havoc.")
+                        },
+                        ValAtAddr(boundVar))),
+                0),
+            vars
+                .filter { it != boundVar.name }
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
+        .also { tsEdge.add(TSEdge(startId, locId.id, this, it)) }
   }
 
   @Suppress("UnusedReceiverParameter")
   private fun Fail.asTransition(locId: LocationID): BooleanExpression {
+    val startId = locId.id
     return makeSingleTransition( // -1 indicates the error location
-        Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
-        Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
-        Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
-        vars
-            .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
-            .reduceOrDefault(True) { acc, next -> And(acc, next) })
+            Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id++).toBigInteger()), 0),
+            Eq(ValAtAddr(Variable("loc'")), NumericLiteral((-1).toBigInteger()), 0),
+            Eq(ValAtAddr(AnyArrayPrimed), ValAtAddr(AnyArray), 0),
+            vars
+                .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
+                .reduceOrDefault(True) { acc, next -> And(acc, next) })
+        .also { tsEdge.add(TSEdge(startId, locId.id, this, it)) }
   }
 
   // Utils
@@ -441,5 +490,27 @@ class TransitionSystem(
 
   fun numberedInvariant(loc: Int): BooleanExpression {
     return invariant.renameVariables(vars.plus("loc").plus("M").associateWith { "${it}$loc" })
+  }
+
+  fun toMermaidString(simplify: Boolean = true): String {
+    return buildString {
+      appendLine("graph TD")
+      appendLine("0(((0)))")
+      tsEdge.forEach { edge ->
+        var transition =
+            (if (simplify) edge.transition.toString().replace("and ${frameCondition}", "")
+                else edge.transition.toString())
+                .removePrefix("(")
+                .removeSuffix(")")
+                .replace("and", "#8743;")
+
+        appendLine("${edge.from}((${edge.from})) -- \"${transition}\" --> ${edge.to}((${edge.to}))")
+        appendLine(
+            "click ${edge.from} call nodeClick(\"${edge.from}\") \"${edge.stmt.toIndentedString("").replace("\"", "#34;")
+                    .replace("<", "#60;")
+                    .replace(">", "#62;")
+                    .replace("\n", "")}\"")
+      }
+    }
   }
 }
