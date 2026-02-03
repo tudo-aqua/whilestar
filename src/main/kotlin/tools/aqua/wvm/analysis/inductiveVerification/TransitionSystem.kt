@@ -58,11 +58,7 @@ class TransitionSystem(
 
   val tsEdge = mutableListOf<TSEdge>()
 
-  private fun changeEdgeTarget(
-      oldTarget: Int,
-      newTarget: Int,
-      transition: BooleanExpression
-  ) {
+  private fun changeEdgeTarget(oldTarget: Int, newTarget: Int, transition: BooleanExpression) {
     tsEdge
         .filter { it.to == oldTarget && it.from == (oldTarget - 1) && !it.final }
         .forEach {
@@ -91,6 +87,7 @@ class TransitionSystem(
 
     // Transition relation
     transitions = context.program.asTransition(locId)
+    if (verbose) println("Transition relation: $transitions")
 
     // Invariant: (Not at error location) and (Either not at the end or the postcondition holds)
     val atEnd = Eq(ValAtAddr(Variable("loc")), NumericLiteral((locId.id).toBigInteger()), 0)
