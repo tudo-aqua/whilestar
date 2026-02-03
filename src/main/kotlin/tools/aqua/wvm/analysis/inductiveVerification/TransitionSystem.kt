@@ -286,7 +286,7 @@ class TransitionSystem(
                 .map { Eq(ValAtAddr(Variable(it)), ValAtAddr(Variable("${it}'")), 0) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) },
             if (useWhileInvariant) prepareOnMemory(this.invariant) else True)
-    tsEdge.add(TSEdge(startId, locId.id, this, loopBody))
+    tsEdge.add(TSEdge(startId, locId.id, this, whileFalseTransition))
     return combineMultipleTransitions(whileTrueTransition, loopBody, whileFalseTransition)
   }
 
