@@ -1,7 +1,7 @@
 vars:
   int x;
   int y;
-pre: (true)
+pre: (x = 0)
 code:
   x := x;
-post: (true)
+post: (x = 0)

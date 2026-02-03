@@ -10,4 +10,4 @@ code:
     x := x - 1;
   };
   print "The sum is ", sum;
-post: (true)
+post: (sum = 55)

@@ -44,10 +44,26 @@ class SMTSolver {
     vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
   }
 
+  companion object {
+    var numberOfSolveCalls = 0
+    val numberOfSMTCalls
+      get() = numberOfSolveCalls
+
+    fun resetCallCounters() {
+      numberOfSolveCalls = 0
+    }
+  }
+
   @Suppress("UNCHECKED_CAST")
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+        is NamedArray -> {
+          if (!vars.containsKey(expr.name)) {
+            vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
+          }
+          UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+        }
         is ArrayRead ->
             ArraySelect(
                 asKonstraint(expr.array) as Expression<ArraySort<IntSort, IntSort>>,
@@ -70,12 +86,27 @@ class SMTSolver {
       return UserDeclaredExpression(Symbol(expr.name), IntSort)
     } else if (expr is ArrayRead) {
       return asKonstraint(expr) as Expression<IntSort>
-    } else throw Exception("WPC Proof System cannot compute with address expression ${expr}")
+    } else if (expr is ArrayWrite) {
+      return asKonstraint(expr) as Expression<IntSort>
+    } else if (expr is NamedArray) {
+      if (!vars.containsKey(expr.name)) {
+        vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
+      }
+      return UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+          as Expression<IntSort>
+    } else
+        throw IllegalSymbolException(
+            "WPC Proof System cannot compute with address expression ${expr}")
   }
 
   fun asKonstraint(expr: ArithmeticExpression): Expression<IntSort> =
       when (expr) {
-        is NumericLiteral -> IntLiteral(expr.literal)
+        is NumericLiteral ->
+            if (expr.literal < 0.toBigInteger()) {
+              IntNeg(IntLiteral(-expr.literal))
+            } else {
+              IntLiteral(expr.literal)
+            }
         is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
@@ -115,12 +146,12 @@ class SMTSolver {
     var commands = vars.values + Assert(konstraint) + CheckSat
     val smtProgram = DefaultSMTProgram(commands, ctx)
     var model = emptyMap<String, String>()
-    smtProgram.solve()
+    smtProgram.solve().also { numberOfSolveCalls++ }
     if (smtProgram.status == SatStatus.SAT) {
       try {
         commands += GetModel
         val progForModel = DefaultSMTProgram(commands, ctx)
-        progForModel.solve()
+        progForModel.solve().also { numberOfSolveCalls++ }
         model =
             progForModel.model?.definitions?.associate { it ->
               (it.name.toString() to it.term.toString())

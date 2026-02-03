@@ -9,4 +9,4 @@ code:
   print "x = ", x;
   extern y 1..1;
   print "y = ", y;
-post: (true)
+post: (y = 1)

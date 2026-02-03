@@ -10,4 +10,4 @@ code:
   *y := 11;
   print "x = ", x;
   print "*y = ", *y;
-post: (true)
+post: (x = 11)
