@@ -500,7 +500,9 @@ class TransitionSystem(
                         .toString()
                         .replace(" and ${frameCondition}", "")
                         .replace("and (M' = M)", "")
-                        .replace(Regex("""\(\(loc\s*=\s*\d+\)\s*and\s*\(loc'\s*=\s*\d+\)\)\s*and\s*"""), "")
+                        .replace(
+                            Regex("""\(\(loc\s*=\s*\d+\)\s*and\s*\(loc'\s*=\s*\d+\)\)\s*and\s*"""),
+                            "")
                         .removeSurrounding("(", ")")
                 else edge.transition.toString())
                 .removeSurrounding("(", ")")
