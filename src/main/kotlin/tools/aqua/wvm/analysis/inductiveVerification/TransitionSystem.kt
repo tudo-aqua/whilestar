@@ -495,12 +495,19 @@ class TransitionSystem(
       appendLine("0(((0)))")
       tsEdge.forEach { edge ->
         var transition =
-            (if (simplify) edge.transition.toString().replace("and ${frameCondition}", "")
+            (if (simplify)
+                    edge.transition
+                        .toString()
+                        .replace(" and ${frameCondition}", "")
+                        .replace("and (M' = M)", "")
+                        .replace(Regex("""\(\(loc\s*=\s*\d+\)\s*and\s*\(loc'\s*=\s*\d+\)\)\s*and\s*"""), "")
+                        .removeSurrounding("(", ")")
                 else edge.transition.toString())
-                .removePrefix("(")
-                .removeSuffix(")")
+                .removeSurrounding("(", ")")
                 .replace("and", "#8743;")
-
+                .replace("<", "#60;")
+                .replace(">", "#62;")
+                .replace("\n", "")
         appendLine("${edge.from}((${edge.from})) -- \"${transition}\" --> ${edge.to}((${edge.to}))")
         appendLine(
             "click ${edge.from} call nodeClick(\"${edge.from}\") \"${edge.stmt.toIndentedString("").replace("\"", "#34;")
