@@ -23,7 +23,6 @@ import tools.aqua.wvm.language.Assignment
 import tools.aqua.wvm.language.Havoc
 import tools.aqua.wvm.language.IfThenElse
 import tools.aqua.wvm.language.Print
-import tools.aqua.wvm.language.Statement
 import tools.aqua.wvm.language.Swap
 import tools.aqua.wvm.language.While
 
@@ -36,7 +35,7 @@ class LVFact(val varname: String, val node: CFGNode<*>) : Fact {
 }
 
 val LVAnalysis =
-    DataflowAnalysis(
+    DataflowAnalysis<LVFact>(
         direction = Direction.Backward,
         type = AnalysisType.May,
         initialization = { c, s ->
@@ -69,16 +68,16 @@ val LVAnalysis =
         assertionGen = { node, _ -> varsInExpr(node.stmt.cond).map { LVFact(it, node) }.toSet() },
         check =
             Check { cfg, marking ->
-              val live =
+              /*val live =
                   cfg.nodes()
                       .map { "${cfg.idOf(it)}: ${marking[it]!!.first.joinToString(", ")} " }
                       .sorted()
-              "The following variables are live at locations: ${live.joinToString("; ")}"
+              "The following variables are live at locations: ${live.joinToString("; ")}"*/ ""
             })
 
-object LVGenKill {
-  fun gen(stmt: Statement): Set<String> =
-      when (stmt) {
+object LVGenKill : AnalysisGenKill<LVFact> {
+  override fun gen(node: CFGNode<*>, inflow: Set<LVFact>): Set<String> =
+      when (val stmt = node.stmt) {
         is Assignment -> varsInExpr(stmt.expr)
         is Print -> stmt.values.map { varsInExpr(it) }.flatten().toSet()
         is While -> varsInExpr(stmt.head)
@@ -88,8 +87,8 @@ object LVGenKill {
         else -> emptySet()
       }
 
-  fun kill(stmt: Statement): Set<String> =
-      when (stmt) {
+  override fun kill(node: CFGNode<*>, inflow: Set<LVFact>): Set<String> =
+      when (val stmt = node.stmt) {
         is Assignment -> varsInExpr(stmt.addr)
         is Swap -> varsInExpr(stmt.left) + varsInExpr(stmt.right)
         is Havoc -> varsInExpr(stmt.addr)

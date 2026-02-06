@@ -58,3 +58,4 @@ code:
     };
   };
   print "out:", a[0];
+post: (i = 0)

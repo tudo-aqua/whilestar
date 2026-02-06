@@ -261,7 +261,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
   }
 
   private fun wpc(stmt: SequenceOfStatements, post: BooleanExpression): BooleanExpression {
-    println(post)
+    // println(post)
     return if (stmt.isExhausted()) post
     else wpc(SequenceOfStatements(stmt.front()), wpc(stmt.end(), post))
   }
@@ -512,8 +512,8 @@ class WPCProofSystem(val context: Context, val output: Output) {
     }
     proofTable.last().post = context.post.toString()
     proofTable.first().wpc = ""
-    println(proofTable.toString())
-    output.println("The proof was ${if (success) "" else "not "}successful.")
+    // println(proofTable.toString())
+    // output.println("The proof was ${if (success) "" else "not "}successful.")
     return success
   }
 }
