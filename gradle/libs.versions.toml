@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 [versions]
-kotlin = "2.0.0"
+kotlin = "2.2.0"
 prettier-toml = "2.0.1"
 
 [plugins]

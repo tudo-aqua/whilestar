@@ -18,11 +18,10 @@
 
 package tools.aqua.wvm.analysis.hoare
 
-import tools.aqua.konstraints.parser.Context
-import tools.aqua.konstraints.parser.SortedVar
+import tools.aqua.konstraints.dsl.UserDeclaredSMTFunction0
 import tools.aqua.konstraints.smt.*
 import tools.aqua.konstraints.smt.Expression
-import tools.aqua.konstraints.theories.*
+import tools.aqua.konstraints.solvers.z3.Z3Solver
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.language.And
 import tools.aqua.wvm.language.False
@@ -33,15 +32,15 @@ import tools.aqua.wvm.language.True
 class SMTSolver {
 
   val memArray = "M_"
+  private val intSort: IntSort = SMTInt
+  private val memSort = SMTArray(intSort, intSort)
 
   class Result(val status: SatStatus, val model: Map<String, String>)
 
-  var vars = mapOf<String, DeclareConst>()
-
-  val ctx = Context(AUFLIA)
+  var vars = mapOf<String, DeclareConst<*>>()
 
   init {
-    vars += (memArray to DeclareConst(Symbol(memArray), ArraySort(IntSort, IntSort)))
+    vars += (memArray to declareConst(memArray, memSort))
   }
 
   companion object {
@@ -55,14 +54,33 @@ class SMTSolver {
   }
 
   @Suppress("UNCHECKED_CAST")
+  private fun <T : Sort> declareConst(name: String, sort: T): DeclareConst<T> {
+    val function = UserDeclaredSMTFunction0(Symbol(name), sort)
+    return DeclareConst(function.instance)
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun getIntVar(name: String): Expression<IntSort> {
+    if (!vars.containsKey(name)) {
+      vars += (name to declareConst(name, intSort))
+    }
+    return (vars[name] as DeclareConst<IntSort>).instance
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun getArrayVar(name: String): Expression<ArraySort<IntSort, IntSort>> {
+    if (!vars.containsKey(name)) {
+      vars += (name to declareConst(name, memSort))
+    }
+    return (vars[name] as DeclareConst<ArraySort<IntSort, IntSort>>).instance
+  }
+
+  @Suppress("UNCHECKED_CAST")
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
-        is AnyArray -> UserDeclaredExpression(Symbol(memArray), ArraySort(IntSort, IntSort))
+        is AnyArray -> getArrayVar(memArray)
         is NamedArray -> {
-          if (!vars.containsKey(expr.name)) {
-            vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
-          }
-          UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
+          getArrayVar(expr.name)
         }
         is ArrayRead ->
             ArraySelect(
@@ -80,20 +98,13 @@ class SMTSolver {
   @Suppress("UNCHECKED_CAST")
   fun asKonstraint(expr: AddressExpression): Expression<IntSort> {
     if (expr is Variable) {
-      if (!vars.containsKey(expr.name)) {
-        vars += (expr.name to DeclareConst(Symbol(expr.name), IntSort))
-      }
-      return UserDeclaredExpression(Symbol(expr.name), IntSort)
+      return getIntVar(expr.name)
     } else if (expr is ArrayRead) {
       return asKonstraint(expr) as Expression<IntSort>
     } else if (expr is ArrayWrite) {
       return asKonstraint(expr) as Expression<IntSort>
     } else if (expr is NamedArray) {
-      if (!vars.containsKey(expr.name)) {
-        vars += (expr.name to DeclareConst(Symbol(expr.name), ArraySort(IntSort, IntSort)))
-      }
-      return UserDeclaredExpression(Symbol(expr.name), ArraySort(IntSort, IntSort))
-          as Expression<IntSort>
+      return getArrayVar(expr.name) as Expression<IntSort>
     } else
         throw IllegalSymbolException(
             "WPC Proof System cannot compute with address expression ${expr}")
@@ -121,15 +132,13 @@ class SMTSolver {
 
   fun asKonstraint(expr: BooleanExpression): Expression<BoolSort> =
       when (expr) {
-        is True -> tools.aqua.konstraints.theories.True
-        is False -> tools.aqua.konstraints.theories.False
-        is And ->
-            tools.aqua.konstraints.theories.And(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Or ->
-            tools.aqua.konstraints.theories.Or(asKonstraint(expr.left), asKonstraint(expr.right))
+        is True -> tools.aqua.konstraints.smt.True
+        is False -> tools.aqua.konstraints.smt.False
+        is And -> tools.aqua.konstraints.smt.And(asKonstraint(expr.left), asKonstraint(expr.right))
+        is Or -> tools.aqua.konstraints.smt.Or(asKonstraint(expr.left), asKonstraint(expr.right))
         is Imply -> Implies(asKonstraint(expr.left), asKonstraint(expr.right))
         is Equiv -> Equals(asKonstraint(expr.left), asKonstraint(expr.right))
-        is Not -> tools.aqua.konstraints.theories.Not(asKonstraint(expr.negated))
+        is Not -> tools.aqua.konstraints.smt.Not(asKonstraint(expr.negated))
         is Gt -> IntGreater(asKonstraint(expr.left), asKonstraint(expr.right))
         is Gte -> IntGreaterEq(asKonstraint(expr.left), asKonstraint(expr.right))
         is Lt -> IntLess(asKonstraint(expr.left), asKonstraint(expr.right))
@@ -137,31 +146,46 @@ class SMTSolver {
         is Eq -> Equals(asKonstraint(expr.left), asKonstraint(expr.right))
         is Forall ->
             ForallExpression(
-                listOf(SortedVar(Symbol(expr.boundVar.name), IntSort)),
+                listOf(SortedVar(Symbol(expr.boundVar.name), intSort)),
                 asKonstraint(expr.expression))
       }
 
   fun solve(expr: BooleanExpression): Result {
     val konstraint = asKonstraint(expr)
-    var commands = vars.values + Assert(konstraint) + CheckSat
-    val smtProgram = DefaultSMTProgram(commands, ctx)
+    var commands = listOf<Command>(SetLogic(AUFLIA)) + vars.values + Assert(konstraint) + CheckSat
+    val smtProgram = DefaultSMTProgram(commands)
     var model = emptyMap<String, String>()
-    smtProgram.solve().also { numberOfSolveCalls++ }
-    if (smtProgram.status == SatStatus.SAT) {
+    val status =
+        Z3Solver().let { solver ->
+          try {
+            numberOfSolveCalls++
+            solver.solve(smtProgram)
+          } finally {
+            solver.close()
+          }
+        }
+    if (status == SatStatus.SAT) {
       try {
         commands += GetModel
-        val progForModel = DefaultSMTProgram(commands, ctx)
-        progForModel.solve().also { numberOfSolveCalls++ }
+        val progForModel = DefaultSMTProgram(commands)
+        val solverModel =
+            Z3Solver().let { solver ->
+              try {
+                numberOfSolveCalls++
+                solver.solve(progForModel)
+                solver.getModel()
+              } finally {
+                solver.close()
+              }
+            }
         model =
-            progForModel.model?.definitions?.associate { it ->
-              (it.name.toString() to it.term.toString())
-            } ?: emptyMap()
+            solverModel.definitions.associate { it -> (it.name.toString() to it.term.toString()) }
       } catch (e: Exception) {
         // todo: produce some output
         // ex.printStackTrace()
         println("Error: ${e.message}")
       }
     }
-    return Result(smtProgram.status, model)
+    return Result(status, model)
   }
 }

@@ -48,7 +48,7 @@ repositories { mavenCentral() }
 dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
-  implementation("tools.aqua:konstraints:0.2")
+  implementation("tools.aqua:konstraints-all:0.4")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.launcher)
 }
