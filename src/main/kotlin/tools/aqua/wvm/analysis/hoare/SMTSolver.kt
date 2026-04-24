@@ -28,6 +28,7 @@ import tools.aqua.wvm.language.False
 import tools.aqua.wvm.language.Not
 import tools.aqua.wvm.language.Or
 import tools.aqua.wvm.language.True
+import tools.aqua.wvm.language.Variable
 
 class SMTSolver {
 
@@ -179,7 +180,9 @@ class SMTSolver {
               }
             }
         model =
-            solverModel.definitions.associate { it -> (it.name.toString() to it.term.toString()) }
+            solverModel.definitions
+                .map { (key, value) -> key.toString() to value.term.toString() }
+                .toMap()
       } catch (e: Exception) {
         // todo: produce some output
         // ex.printStackTrace()
