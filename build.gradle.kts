@@ -47,8 +47,8 @@ gitVersioning.apply {
   describeTagFirstParent = false
   refs {
     considerTagsOnBranches = true
-    tag("v(?<version>.*)") {
-      // on a version tag like v0.3.0, publish 0.3.0
+    tag("(?<version>.*)") {
+      // on a version tag like 0.3.0, publish 0.3.0
       version = "\${ref.version}"
     }
     branch("main") {
