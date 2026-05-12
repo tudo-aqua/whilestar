@@ -16,32 +16,52 @@
  * limitations under the License.
  */
 
+import com.vanniktech.maven.publish.JavadocJar.Dokka
+import com.vanniktech.maven.publish.KotlinJvm
 import com.github.gradle.node.variant.computeNodeDir
 import com.github.gradle.node.variant.computeNodeExec
 import org.gradle.api.plugins.JavaBasePlugin.DOCUMENTATION_GROUP
-import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
+import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.testing.logging.TestLogEvent.FAILED
 import org.gradle.api.tasks.testing.logging.TestLogEvent.PASSED
 import org.gradle.api.tasks.testing.logging.TestLogEvent.SKIPPED
 
 plugins {
-  `maven-publish`
-  signing
-
+  alias(libs.plugins.git.versioning)
   alias(libs.plugins.kotlin.dokka)
   alias(libs.plugins.kotlin.jvm)
   alias(libs.plugins.kotlin.serialization)
-  alias(libs.plugins.nexus.publish)
   alias(libs.plugins.node)
   alias(libs.plugins.runtime)
   alias(libs.plugins.spotless)
   alias(libs.plugins.taskTree)
+  alias(libs.plugins.vanniktech.maven.publish)
   alias(libs.plugins.versions)
 }
 
 group = "tools.aqua"
 
-version = "0.3-SNAPSHOT"
+version = "0.0.0-SNAPSHOT"
+
+gitVersioning.apply {
+  describeTagFirstParent = false
+  refs {
+    considerTagsOnBranches = true
+    tag("v(?<version>.*)") {
+      // on a version tag like v0.3.0, publish 0.3.0
+      version = "\${ref.version}"
+    }
+    branch("main") {
+      version = "\${describe.tag.version}-\${describe.distance}-\${commit.short}-SNAPSHOT"
+    }
+    branch(".+") {
+      version =
+          "\${describe.tag.version}-\${ref.slug}-\${describe.distance}-\${commit.short}-SNAPSHOT"
+    }
+  }
+
+  rev { version = "0.0.0-unknown-0-\${commit.short}-SNAPSHOT" }
+}
 
 repositories { mavenCentral() }
 
@@ -115,32 +135,12 @@ val kdocJar: TaskProvider<Jar> by
     tasks.registering(Jar::class) {
       group = DOCUMENTATION_GROUP
       archiveClassifier = "kdoc"
-      from(tasks.dokkaHtml.flatMap { it.outputDirectory })
+      from(tasks.named("dokkaGeneratePublicationHtml"))
     }
-
-val kdoc: Configuration by
-    configurations.creating {
-      isCanBeConsumed = true
-      isCanBeResolved = false
-    }
-
-artifacts { add(kdoc.name, kdocJar) }
-
-val javadocJar: TaskProvider<Jar> by
-    tasks.registering(Jar::class) {
-      group = DOCUMENTATION_GROUP
-      archiveClassifier = "javadoc"
-      from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
-    }
-
-java {
-  withJavadocJar()
-  withSourcesJar()
-}
 
 kotlin { jvmToolchain(21) }
 
-tasks.create("fatJar", Jar::class) {
+tasks.register<Jar>("fatJar") {
   archiveBaseName = "${project.name}-with-dependencies"
   group = "build"
   description = "Creates a self-contained fat JAR that can be used for testing WVM locally."
@@ -158,59 +158,53 @@ tasks.test {
 
 application { mainClass = "tools.aqua.wvm.MainKt" }
 
-publishing {
-  publications {
-    create<MavenPublication>("maven") {
-      from(components["java"])
+mavenPublishing {
+  publishToMavenCentral()
+  signAllPublications()
 
-      pom {
-        name = "While* Virtual Machine"
-        description = "An execution environment for the While* teaching language"
-        url = "https://github.com/tudo-aqua/whilestar"
+  configure(KotlinJvm(Dokka(tasks.named("dokkaGeneratePublicationHtml"))))
 
-        licenses {
-          license {
-            name = "Apache-2.0"
-            url = "https://www.apache.org/licenses/LICENSE-2.0"
-          }
-          license {
-            name = "CC-BY-4.0"
-            url = "https://creativecommons.org/licenses/by/4.0/"
-          }
-        }
+  pom {
+    name.set("While* Virtual Machine")
+    description.set("An execution environment for the While* teaching language")
+    url.set("https://github.com/tudo-aqua/whilestar")
 
-        developers {
-          developer {
-            name = "Simon Dierl"
-            email = "simon.dierl@tu-dortmund.de"
-            organization = "TU Dortmund University"
-          }
-          developer {
-            name = "Falk Howar"
-            email = "falk.howar@tu-dortmund.de"
-            organization = "TU Dortmund University"
-          }
-          developer {
-            name = "Richard Stewing"
-            email = "richard.stewing@tu-dortmund.de"
-            organization = "TU Dortmund University"
-          }
-        }
-
-        scm {
-          connection = "scm:git:https://github.com:tudo-aqua/whilestar.git"
-          developerConnection = "scm:git:ssh://git@github.com:tudo-aqua/whilestar.git"
-          url = "https://github.com/tudo-aqua/whilestar/tree/main"
-        }
+    licenses {
+      license {
+        name.set("Apache-2.0")
+        url.set("https://www.apache.org/licenses/LICENSE-2.0")
       }
+      license {
+        name.set("CC-BY-4.0")
+        url.set("https://creativecommons.org/licenses/by/4.0/")
+      }
+    }
+
+    developers {
+      developer {
+        name.set("Richard Stewing")
+        organization.set("TU Dortmund University")
+      }
+      developer {
+        name.set("Falk Howar")
+        organization.set("TU Dortmund University")
+      }
+      developer {
+        name.set("Arwin Semmler")
+        organization.set("TU Dortmund University")
+      }
+      developer {
+        name.set("Lars Nitzschke")
+        organization.set("TU Dortmund University")
+      }
+    }
+
+    scm {
+      url.set("https://github.com/tudo-aqua/whilestar/tree/main")
+      connection.set("scm:git:git://github.com/tudo-aqua/whilestar.git")
+      developerConnection.set("scm:git:ssh://git@github.com:tudo-aqua/whilestar.git")
     }
   }
 }
 
-signing {
-  setRequired { gradle.taskGraph.allTasks.any { it.group == PUBLISH_TASK_GROUP } }
-  useGpgCmd()
-  sign(publishing.publications["maven"])
-}
-
-nexusPublishing { this.repositories { sonatype() } }
+publishing.publications.named<MavenPublication>("maven").configure { artifact(kdocJar) }
