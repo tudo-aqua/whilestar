@@ -33,6 +33,7 @@ import tools.aqua.wvm.language.Variable
 class SMTSolver {
 
   val memArray = "M_"
+  private val solverTimeoutMs = 5_000L
   private val intSort: IntSort = SMTInt
   private val memSort = SMTArray(intSort, intSort)
 
@@ -153,42 +154,22 @@ class SMTSolver {
 
   fun solve(expr: BooleanExpression): Result {
     val konstraint = asKonstraint(expr)
-    var commands = listOf<Command>(SetLogic(AUFLIA)) + vars.values + Assert(konstraint) + CheckSat
+    val commands = listOf<Command>(SetLogic(AUFLIA)) + vars.values + Assert(konstraint)
     val smtProgram = DefaultSMTProgram(commands)
-    var model = emptyMap<String, String>()
-    val status =
+    val (status, solverModel) =
         Z3Solver().let { solver ->
           try {
             numberOfSolveCalls++
-            solver.solve(smtProgram)
+            solver.solve(smtProgram, produceModel = true, timeout = solverTimeoutMs)
           } finally {
             solver.close()
           }
         }
-    if (status == SatStatus.SAT) {
-      try {
-        commands += GetModel
-        val progForModel = DefaultSMTProgram(commands)
-        val solverModel =
-            Z3Solver().let { solver ->
-              try {
-                numberOfSolveCalls++
-                solver.solve(progForModel)
-                solver.getModel()
-              } finally {
-                solver.close()
-              }
-            }
-        model =
-            solverModel.definitions
-                .map { (key, value) -> key.toString() to value.term.toString() }
-                .toMap()
-      } catch (e: Exception) {
-        // todo: produce some output
-        // ex.printStackTrace()
-        println("Error: ${e.message}")
-      }
-    }
+    val model =
+        solverModel
+            ?.definitions
+            ?.map { (key, value) -> key.toString() to value.term.toString() }
+            ?.toMap() ?: emptyMap()
     return Result(status, model)
   }
 }

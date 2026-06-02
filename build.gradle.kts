@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
-import com.vanniktech.maven.publish.JavadocJar.Dokka
-import com.vanniktech.maven.publish.KotlinJvm
 import com.github.gradle.node.variant.computeNodeDir
 import com.github.gradle.node.variant.computeNodeExec
+import com.vanniktech.maven.publish.JavadocJar.Dokka
+import com.vanniktech.maven.publish.KotlinJvm
 import org.gradle.api.plugins.JavaBasePlugin.DOCUMENTATION_GROUP
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.testing.logging.TestLogEvent.FAILED
@@ -68,7 +68,7 @@ repositories { mavenCentral() }
 dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
-  implementation("tools.aqua:konstraints-all:0.4.1")
+  implementation("tools.aqua:konstraints-all:0.4.2")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.launcher)
 }

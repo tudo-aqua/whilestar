@@ -76,12 +76,14 @@ class BMCSafetyChecker(
                 SatStatus.SAT -> "is violated. Counterexample: ${result.model}"
                 SatStatus.UNKNOWN -> "could not be decided.."
                 SatStatus.PENDING -> "exited with an error during solving."
+                SatStatus.ERROR -> "exited with an error during solving."
               })
       when (result.status) {
         SatStatus.UNSAT -> {} // Continue checking
         SatStatus.SAT -> return true
         SatStatus.UNKNOWN -> return false
         SatStatus.PENDING -> return false
+        SatStatus.ERROR -> return false
       }
     }
     return false

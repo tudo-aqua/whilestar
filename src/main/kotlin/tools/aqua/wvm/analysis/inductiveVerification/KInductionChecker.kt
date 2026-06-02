@@ -80,6 +80,10 @@ class KInductionChecker(
             out.println("Error during SMT solving of depth check at k = $k.")
             return false
           }
+          SatStatus.ERROR -> {
+            out.println("Error during SMT solving of depth check at k = $k.")
+            return false
+          }
         }
 
         // 1. Base case (== (k-1)-safety)
@@ -102,6 +106,10 @@ class KInductionChecker(
             return false
           }
           SatStatus.PENDING -> {
+            out.println("Error during SMT solving of base case.")
+            return false
+          }
+          SatStatus.ERROR -> {
             out.println("Error during SMT solving of base case.")
             return false
           }
@@ -132,6 +140,10 @@ class KInductionChecker(
             return false
           }
           SatStatus.PENDING -> {
+            out.println("Error during SMT solving of inductive step.")
+            return false
+          }
+          SatStatus.ERROR -> {
             out.println("Error during SMT solving of inductive step.")
             return false
           }
@@ -191,6 +203,10 @@ class KInductionCheckerWithBMC(
           out.println("Error during SMT solving of BMC 0.")
           return false
         }
+        SatStatus.ERROR -> {
+          out.println("Error during SMT solving of BMC 0.")
+          return false
+        }
       }
 
       // Now do k-induction with BMC up to kBound
@@ -222,6 +238,10 @@ class KInductionCheckerWithBMC(
             out.println("Error during SMT solving of BMC / $k-induction basis.")
             return false
           }
+          SatStatus.ERROR -> {
+            out.println("Error during SMT solving of BMC / $k-induction basis.")
+            return false
+          }
         }
 
         // Depth check for (k+1)-induction step
@@ -237,6 +257,10 @@ class KInductionCheckerWithBMC(
             return true
           }
           SatStatus.PENDING -> {
+            out.println("Error during SMT solving of depth check at k = $k.")
+            return true
+          }
+          SatStatus.ERROR -> {
             out.println("Error during SMT solving of depth check at k = $k.")
             return true
           }
@@ -259,6 +283,10 @@ class KInductionCheckerWithBMC(
             return false
           }
           SatStatus.PENDING -> {
+            out.println("Error during SMT solving of inductive step.")
+            return false
+          }
+          SatStatus.ERROR -> {
             out.println("Error during SMT solving of inductive step.")
             return false
           }

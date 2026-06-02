@@ -485,6 +485,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
             SatStatus.SAT -> "counterexample: ${result.model}"
             SatStatus.UNKNOWN -> "could not be decided.."
             SatStatus.PENDING -> "error during solving."
+            SatStatus.ERROR -> "error during solving."
           })
 
       if (result.status != SatStatus.UNSAT) {
