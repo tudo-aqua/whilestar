@@ -346,9 +346,13 @@ class Parser(restricted: Boolean = false) {
   fun parse(input: String): Context {
     val result = parser.parse(input)
     if (result.isFailure) {
-      var errLoc = result.buffer.substring(result.position)
-      errLoc = errLoc.substring(0, errLoc.indexOf("\n"))
-      throw Exception("${result.message} while parsing statement that starts in line: ${errLoc}")
+      val position = minOf(result.position, input.length)
+      // count newlines before the failure position to get the 1-based line number
+      val lineNumber = input.substring(0, position).count { it == '\n' } + 1
+      val lineContent = input.substring(position).substringBefore('\n').trim()
+      throw Exception(
+          "Syntax error on line $lineNumber: ${result.message}" +
+              (if (lineContent.isNotEmpty()) " (line content: '$lineContent')" else ""))
     }
     return result.get()
   }

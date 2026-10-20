@@ -39,11 +39,14 @@ class SMTSolver {
 
   class Result(val status: SatStatus, val model: Map<String, String>)
 
+  // The memory array constant [memArray] ("M_") is NOT declared
+  // unconditionally. It is declared lazily in [getArrayVar] as soon as the
+  // verification condition actually contains an array expression (e.g. an
+  // [AnyArray] node). Declaring it unconditionally would crash the Z3 model
+  // extraction for SAT (failed proof) results, since an unconstrained
+  // constant has no interpretation in the produced model (konstraints-z3
+  // NPE on getConstInterp).
   var vars = mapOf<String, DeclareConst<*>>()
-
-  init {
-    vars += (memArray to declareConst(memArray, memSort))
-  }
 
   companion object {
     var numberOfSolveCalls = 0
@@ -156,20 +159,68 @@ class SMTSolver {
     val konstraint = asKonstraint(expr)
     val commands = listOf<Command>(SetLogic(AUFLIA)) + vars.values + Assert(konstraint)
     val smtProgram = DefaultSMTProgram(commands)
-    val (status, solverModel) =
-        Z3Solver().let { solver ->
-          try {
-            numberOfSolveCalls++
-            solver.solve(smtProgram, produceModel = true, timeout = solverTimeoutMs)
-          } finally {
-            solver.close()
-          }
-        }
-    val model =
-        solverModel
-            ?.definitions
-            ?.map { (key, value) -> key.toString() to value.term.toString() }
-            ?.toMap() ?: emptyMap()
-    return Result(status, model)
+    val solver = Z3Solver()
+    try {
+      numberOfSolveCalls++
+      val (status, solverModel) =
+          solver.solve(smtProgram, produceModel = true, timeout = solverTimeoutMs)
+      val model =
+          solverModel
+              ?.definitions
+              ?.map { (key, value) -> key.toString() to value.term.toString() }
+              ?.toMap() ?: emptyMap()
+      return Result(status, model)
+    } catch (e: Exception) {
+      // Safety net: konstraints-z3 can crash while converting the Z3 model into an
+      // aqua model even though solving itself succeeded (e.g. an NPE when a declared
+      // constant such as [memArray] is unconstrained, or a RuntimeException when the
+      // model represents an array as a constant array). Z3Solver sets its status right
+      // after check() and only then starts model extraction, so a non-PENDING status
+      // here means the solve result is valid and only the model extraction failed.
+      // The model is only used for string display by the callers, so we fall back to
+      // a best-effort model extracted directly from the raw Z3 API.
+      if (solver.status == SatStatus.PENDING) {
+        throw e
+      }
+      System.err.println(
+          "WARNING: Z3 model extraction failed after solving (status ${solver.status}): " +
+              "${e.javaClass.simpleName}: ${e.message}")
+      return Result(solver.status, extractRawModel(solver))
+    } finally {
+      solver.close()
+    }
+  }
+
+  /**
+   * Best-effort model extraction using the raw Z3 API. Used as a fallback when the model conversion
+   * of konstraints-z3 crashes. The values are rendered using Z3's own toString (SMT-LIB style),
+   * which is sufficient for the string-only display use cases of the model.
+   */
+  private fun extractRawModel(solver: Z3Solver): Map<String, String> {
+    return try {
+      val rawModel = solver.solver.model ?: return emptyMap()
+      rawModel.decls.associate { decl -> decl.name.toString() to rawModelValue(rawModel, decl) }
+    } catch (e: Exception) {
+      emptyMap()
+    }
+  }
+
+  private fun rawModelValue(
+      rawModel: com.microsoft.z3.Model,
+      decl: com.microsoft.z3.FuncDecl<*>
+  ): String {
+    return try {
+      when (decl.arity) {
+        0 ->
+            try {
+              rawModel.getConstInterp(decl)?.toString()
+            } catch (e: Exception) {
+              rawModel.getFuncInterp(decl)?.toString()
+            }
+        else -> rawModel.getFuncInterp(decl)?.toString()
+      } ?: "(no interpretation)"
+    } catch (e: Exception) {
+      "(no interpretation)"
+    }
   }
 }

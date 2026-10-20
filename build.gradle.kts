@@ -69,6 +69,7 @@ dependencies {
   implementation(libs.clikt)
   implementation(libs.petitparser.core)
   implementation("tools.aqua:konstraints-all:0.4.3")
+  implementation("tools.aqua:z3-turnkey:4.14.1")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.launcher)
 }

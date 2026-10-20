@@ -517,4 +517,17 @@ class WPCProofSystem(val context: Context, val output: Output) {
     // output.println("The proof was ${if (success) "" else "not "}successful.")
     return success
   }
+
+  /**
+   * Computes the weakest precondition of the program for the given postcondition. If no weakest
+   * precondition can be derived (e.g. a loop invariant is not valid for the loop body), null is
+   * returned.
+   */
+  fun weakestPrecondition(post: BooleanExpression): BooleanExpression? {
+    return try {
+      wpc(SequenceOfStatements(context.program), prepare(post))
+    } catch (e: Exception) {
+      null
+    }
+  }
 }
