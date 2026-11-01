@@ -73,7 +73,7 @@ class BMCSafetyChecker(
           "BMC result: $bound-safety " +
               when (result.status) {
                 SatStatus.UNSAT -> "is fulfilled."
-                SatStatus.SAT -> "is violated. Counterexample: ${result.model}"
+                SatStatus.SAT -> "is violated. Counterexample: ${result.modelText()}"
                 SatStatus.UNKNOWN -> "could not be decided.."
                 SatStatus.PENDING -> "exited with an error during solving."
                 SatStatus.ERROR -> "exited with an error during solving."

@@ -20,7 +20,6 @@ package tools.aqua.wvm.language
 
 import java.math.BigInteger
 import java.util.Scanner
-import kotlin.random.Random
 import tools.aqua.wvm.analysis.semantics.*
 import tools.aqua.wvm.machine.Configuration
 
@@ -116,7 +115,7 @@ data class Assertion(val cond: BooleanExpression) : Statement {
   override fun execute(cfg: Configuration, input: Scanner?): StatementApp {
     val b = cond.evaluate(cfg.scope, cfg.memory)
     if (b is Error)
-        NestedStatementError(
+        return NestedStatementError(
             "AssertErr",
             b,
             this,
@@ -151,7 +150,7 @@ data class IfThenElse(
   override fun execute(cfg: Configuration, input: Scanner?): StatementApp {
     val b = cond.evaluate(cfg.scope, cfg.memory)
     if (b is Error)
-        NestedStatementError(
+        return NestedStatementError(
             "IfErr",
             b,
             this,
@@ -201,16 +200,16 @@ data class While(
     val invar = invariant.evaluate(cfg.scope, cfg.memory)
 
     if (cond is Error)
-        NestedStatementError(
-            "IfErr",
+        return NestedStatementError(
+            "WhileErr",
             cond,
             this,
             Transition(
                 cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
 
     if (invar is Error)
-        NestedStatementError(
-            "IfErr",
+        return NestedStatementError(
+            "WhileErr",
             invar,
             this,
             Transition(
@@ -297,16 +296,25 @@ data class Havoc(
   override fun execute(cfg: Configuration, input: Scanner?): StatementApp {
     val a = addr.evaluate(cfg.scope, cfg.memory)
     if (a is Error)
-        NestedStatementError(
+        return NestedStatementError(
             "HavocErr",
             a,
             this,
             Transition(
                 cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
 
-    val number =
-        input?.nextBigInteger() ?: Random.nextLong(lower.toLong(), upper.toLong()).toBigInteger()
-    return if (number < lower || number > upper)
+    val number: BigInteger
+    if (input == null) {
+      number = randomInRange()
+    } else if (input.hasNextBigInteger()) {
+      number = input.nextBigInteger()
+    } else {
+      return HavocInputErr(
+          a as AddressOk,
+          this,
+          Transition(cfg, dst = Configuration(SequenceOfStatements(), cfg.scope, cfg.memory, true)))
+    }
+    return if (number < lower || number >= upper)
         HavocRangeErr(
             a as AddressOk,
             this,
@@ -328,6 +336,18 @@ data class Havoc(
 
   override fun toIndentedString(indent: String) =
       "${indent}extern $addr $lower .. ${upper.minus(BigInteger.ONE)};\n"
+
+  /**
+   * Uniform value in `[lower, upper)`. The bounds are arbitrary precision in the grammar, so they
+   * must not be narrowed to `Long` (a range of `0 .. 10^20` used to draw from a much smaller one).
+   */
+  private fun randomInRange(): BigInteger {
+    val width = upper.minus(lower)
+    val source = java.util.concurrent.ThreadLocalRandom.current()
+    var candidate = BigInteger(width.bitLength(), source)
+    while (candidate >= width) candidate = BigInteger(width.bitLength(), source)
+    return lower.plus(candidate)
+  }
 }
 
 data class Fail(val message: String) : Statement {

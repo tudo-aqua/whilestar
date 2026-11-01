@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.hoare
 
+import java.math.BigInteger
 import tools.aqua.konstraints.dsl.UserDeclaredSMTFunction0
 import tools.aqua.konstraints.smt.*
 import tools.aqua.konstraints.smt.Expression
@@ -37,13 +38,19 @@ class SMTSolver {
   private val intSort: IntSort = SMTInt
   private val memSort = SMTArray(intSort, intSort)
 
-  class Result(val status: SatStatus, val model: Map<String, String>)
-
-  var vars = mapOf<String, DeclareConst<*>>()
-
-  init {
-    vars += (memArray to declareConst(memArray, memSort))
+  class Result(
+      val status: SatStatus,
+      val model: Map<String, String>,
+      val modelAvailable: Boolean = true
+  ) {
+    fun modelText(): String =
+        if (modelAvailable) model.toSortedMap().toString()
+        else "(model not representable by konstraints)"
   }
+
+  // the memory is declared on first use (see getArrayVar), so queries that do not mention it keep
+  // a printable model instead of the constant array that konstraints cannot serialize
+  var vars = mapOf<String, DeclareConst<*>>()
 
   companion object {
     var numberOfSolveCalls = 0
@@ -121,13 +128,13 @@ class SMTSolver {
               IntLiteral(expr.literal)
             }
         is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
+        is Div -> truncatingDiv(asKonstraint(expr.left), asKonstraint(expr.right))
         is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Rem -> Mod(asKonstraint(expr.left), asKonstraint(expr.right))
+        is Rem -> truncatingRem(asKonstraint(expr.left), asKonstraint(expr.right))
         is Sub -> IntSub(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
         is ValAtAddr -> asKonstraint(expr.addr)
-        is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
+        is VarAddress -> asKonstraint(ValAtAddr(expr.variable))
       // is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as
       // Expression<IntSort>
       }
@@ -152,15 +159,79 @@ class SMTSolver {
                 asKonstraint(expr.expression))
       }
 
+  /**
+   * SMT-LIB integer division is Euclidean (0 <= mod < |divisor|), whereas the interpreter truncates
+   * towards zero (BigInteger.divide/rem). Both agree unless the dividend is negative and the
+   * division is inexact; then the quotient is moved one step towards zero and the remainder becomes
+   * negative.
+   */
+  private fun truncatingDiv(
+      dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val quotient = IntDiv(listOf(dividend, divisor))
+    val adjust = negativeDividendAndRemainder(dividend, divisor)
+    return Ite(adjust, IntAdd(listOf(quotient, divisorSign(divisor))), quotient)
+  }
+
+  private fun truncatingRem(
+      dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val remainder = Mod(dividend, divisor)
+    val adjust = negativeDividendAndRemainder(dividend, divisor)
+    return Ite(adjust, IntSub(listOf(remainder, absolute(divisor))), remainder)
+  }
+
+  private fun negativeDividendAndRemainder(
+      dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<BoolSort> {
+    val zero = IntLiteral(BigInteger.ZERO)
+    val dividendNegative = IntLess(listOf(dividend, zero))
+    val remainder = tools.aqua.konstraints.smt.Not(Equals(Mod(dividend, divisor), zero))
+    return tools.aqua.konstraints.smt.And(dividendNegative, remainder)
+  }
+
+  private fun divisorSign(
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val zero = IntLiteral(BigInteger.ZERO)
+    return Ite(
+        IntGreater(listOf(divisor, zero)),
+        IntLiteral(BigInteger.ONE),
+        IntNeg(IntLiteral(BigInteger.ONE)))
+  }
+
+  private fun absolute(
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val zero = IntLiteral(BigInteger.ZERO)
+    return Ite(IntLess(listOf(divisor, zero)), IntNeg(divisor), divisor)
+  }
+
   fun solve(expr: BooleanExpression): Result {
     val konstraint = asKonstraint(expr)
     val commands = listOf<Command>(SetLogic(AUFLIA)) + vars.values + Assert(konstraint)
     val smtProgram = DefaultSMTProgram(commands)
+    return try {
+      runSolver(smtProgram, produceModel = true)
+    } catch (e: Exception) {
+      // konstraints cannot convert every model Z3 returns: a constant array (the memory is one)
+      // makes the declaration map reject the model and the whole proof would fail. The
+      // satisfiability answer is already decided at that point, so ask once more without a model.
+      val fallback = runSolver(smtProgram, produceModel = false)
+      Result(fallback.status, emptyMap(), modelAvailable = false)
+    }
+  }
+
+  private fun runSolver(smtProgram: SMTProgram, produceModel: Boolean): Result {
+    // counted here so that the repeated query of solve's fallback shows up as well
+    numberOfSolveCalls++
     val (status, solverModel) =
         Z3Solver().let { solver ->
           try {
-            numberOfSolveCalls++
-            solver.solve(smtProgram, produceModel = true, timeout = solverTimeoutMs)
+            solver.solve(smtProgram, produceModel = produceModel, timeout = solverTimeoutMs)
           } finally {
             solver.close()
           }
