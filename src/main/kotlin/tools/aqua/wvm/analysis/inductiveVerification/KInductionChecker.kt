@@ -67,7 +67,7 @@ class KInductionChecker(
         if (verbose) out.println("SMT test for depth check: $depthCheck")
         val depthResult = SMTSolver().solve(depthCheck)
         when (depthResult.status) {
-          SatStatus.SAT -> out.println("Depth check passed. ${depthResult.model.toSortedMap()}")
+          SatStatus.SAT -> out.println("Depth check passed. ${depthResult.modelText()}")
           SatStatus.UNSAT -> {
             out.println("Depth check failed. Program may be shorter than k = $k.")
             return true
@@ -98,7 +98,7 @@ class KInductionChecker(
           SatStatus.UNSAT -> out.println("Base case passed.")
           SatStatus.SAT -> {
             out.println(
-                "Base case failed. ${k-1}-safety does not hold. Counterexample: ${baseResult.model.toSortedMap()}")
+                "Base case failed. ${k-1}-safety does not hold. Counterexample: ${baseResult.modelText()}")
             return false
           }
           SatStatus.UNKNOWN -> {
@@ -134,7 +134,7 @@ class KInductionChecker(
           }
           SatStatus.SAT ->
               out.println(
-                  "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${stepResult.model.toSortedMap()}")
+                  "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${stepResult.modelText()}")
           SatStatus.UNKNOWN -> {
             out.println("Inductive step could not be decided.")
             return false
@@ -192,7 +192,7 @@ class KInductionCheckerWithBMC(
         SatStatus.UNSAT -> out.println("BMC 0 passed.")
         SatStatus.SAT -> {
           out.println(
-              "BMC 0 failed. 0-safety does not hold. Counterexample: ${bmc0Result.model.toSortedMap()}")
+              "BMC 0 failed. 0-safety does not hold. Counterexample: ${bmc0Result.modelText()}")
           return false
         }
         SatStatus.UNKNOWN -> {
@@ -227,7 +227,7 @@ class KInductionCheckerWithBMC(
         when (result.status) {
           SatStatus.UNSAT -> out.println("BMC-$k / $k-induction basis passed.")
           SatStatus.SAT -> {
-            out.println("BMC-$k failed. Counterexample: ${result.model.toSortedMap()}")
+            out.println("BMC-$k failed. Counterexample: ${result.modelText()}")
             return false
           }
           SatStatus.UNKNOWN -> {
@@ -277,7 +277,7 @@ class KInductionCheckerWithBMC(
           }
           SatStatus.SAT ->
               out.println(
-                  "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${result.model.toSortedMap()}")
+                  "Inductive step failed. Could not prove safety with k = $k. Counterexample: ${result.modelText()}")
           SatStatus.UNKNOWN -> {
             out.println("Inductive step could not be decided.")
             return false

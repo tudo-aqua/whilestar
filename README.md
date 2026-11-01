@@ -69,3 +69,21 @@ $ <wvmfolder>/bin/wvm <filename.w>
 ```
 
 Use argument `--help` to see a list of command-line parameters.
+
+## Proof system and model checkers
+
+WVM provides an interpreter, a type checker, a Hoare proof system (`-p`), and two model
+checkers (`-b` for BMC, `-k` for k-induction). They answer different questions, so the
+following limitations are intentional:
+
+- `-p` proves **partial correctness** only: if the program terminates, the postcondition
+  holds. It does not generate safety assertions for arithmetic or address faults, so a
+  program such as `y := x / 0;` can be reported safe even though the interpreter would
+  report an arithmetic error.
+- `int[n] a` declares an array of `n` cells, but indexing is checked against the total
+  memory, not against `n`. With `int[2] a; int b;`, `a[2] := 99;` overwrites `b` without
+  an error. The parser, interpreter, type checker, proof system and model checkers agree
+  on this flat-memory semantics; it is a design decision, not a bug.
+- If Z3 returns the memory as a constant array, `konstraints` cannot serialise it, so the
+  counterexample is printed as `(model not representable by konstraints)`. The proof
+  verdict is still exact; only the counterexample is omitted.

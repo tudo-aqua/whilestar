@@ -285,4 +285,6 @@ class HavocOk(val addr: AddressOk, val havoc: Havoc, trans: Transition) : Statem
 
 class HavocRangeErr(val addr: AddressOk, val havoc: Havoc, trans: Transition) : StatementOk(trans)
 
+class HavocInputErr(val addr: AddressOk, val havoc: Havoc, trans: Transition) : StatementOk(trans)
+
 class FailOk(val fail: Fail, trans: Transition) : StatementOk(trans)

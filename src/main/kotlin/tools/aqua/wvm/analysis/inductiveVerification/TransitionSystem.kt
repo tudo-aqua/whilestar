@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.inductiveVerification
 
+import java.math.BigInteger
 import tools.aqua.konstraints.util.reduceOrDefault
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
@@ -99,70 +100,44 @@ class TransitionSystem(
     numLocations = locId.id + 1
   }
 
-  private fun initVars(): BooleanExpression {
-    var memIndex = 0
-    return context.scope.symbols
-        .map {
-          when {
-            it.value.type == BasicType.INT -> // integer variable initialized to 0
-            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0)
-            it.value.type is Pointer && it.value.size == 1 -> // pointer to integer initialized to 0
-            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0)
-            it.value.size > 1 -> { // array initialized to 0
-              val eq = Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0)
-              memIndex += it.value.size
-              eq
-            }
-            else ->
-                throw Exception("Unsupported variable type in transition system initial condition.")
+  private fun initVars(): BooleanExpression =
+      context.scope.symbols.entries
+          .sortedBy { it.value.address }
+          .map { (name, info) ->
+            Eq(ValAtAddr(Variable(name)), NumericLiteral(info.address.toBigInteger()), 0)
           }
-        }
-        .reduceOrDefault(True) { acc, next -> And(acc, next) }
-  }
+          .reduceOrDefault(True) { acc, next -> And(acc, next) }
 
-  private fun initMemory(): BooleanExpression {
-    var memIndex = 0
-    return context.scope.symbols
-        .map {
-          when {
-            it.value.type == BasicType.INT ->
-                listOf( // integer variable initialized to 0
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0),
-                    Eq(
-                        ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
-                        NumericLiteral(0.toBigInteger()),
-                        0))
-            it.value.type is Pointer && it.value.size == 1 ->
-                listOf( // pointer to integer initialized to 0
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0),
-                    Eq(
-                        ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
-                        NumericLiteral(0.toBigInteger()),
-                        0))
-            it.value.size > 1 ->
-                listOf( // array initialized to 0
-                    // TODO: Maybe change this to variable instead of index notation as well.
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
-                    Eq(
-                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
-                        NumericLiteral(((memIndex++) + 1).toBigInteger()),
-                        0),
-                    (0 until it.value.size - 1)
-                        .map {
-                          Eq(
-                              ValAtAddr(
-                                  ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
-                              NumericLiteral(0.toBigInteger()),
-                              0)
-                        }
-                        .reduceOrDefault(True) { acc, next -> And(acc, next) })
-            else ->
-                throw Exception("Unsupported variable type in transition system initial condition.")
+  private fun initMemory(): BooleanExpression =
+      context.scope.symbols.entries
+          .sortedBy { it.value.address }
+          .map { (name, info) ->
+            val addr = info.address
+            when {
+              info.size == 1 ->
+                  listOf(
+                      Eq(ValAtAddr(Variable(name)), NumericLiteral(addr.toBigInteger()), 0),
+                      Eq(
+                          ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
+                          NumericLiteral(BigInteger.ZERO),
+                          0))
+              else ->
+                  listOf(
+                      Eq(ValAtAddr(Variable(name)), NumericLiteral(addr.toBigInteger()), 0),
+                      Eq(
+                          ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
+                          NumericLiteral((addr + 1).toBigInteger()),
+                          0)) +
+                      (addr + 1 until addr + info.size).map { cell ->
+                        Eq(
+                            ValAtAddr(ArrayRead(AnyArray, NumericLiteral(cell.toBigInteger()))),
+                            NumericLiteral(BigInteger.ZERO),
+                            0)
+                      }
+            }
           }
-        }
-        .flatten()
-        .reduceOrDefault(True) { acc, next -> And(acc, next) }
-  }
+          .flatten()
+          .reduceOrDefault(True) { acc, next -> And(acc, next) }
 
   private fun prepareOnMemory(phi: AddressExpression): AddressExpression =
       when (phi) {
