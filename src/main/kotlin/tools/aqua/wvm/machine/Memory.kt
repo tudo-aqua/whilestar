@@ -35,7 +35,7 @@ class Memory(private val store: Array<BigInteger>) {
   }
 
   private fun checkBounds(addr: Int) {
-    if (addr < 0 || store.size < addr) {
+    if (addr < 0 || addr >= store.size) {
       throw Exception("segmentation fault: tried to access invalid address: $addr")
     }
   }
