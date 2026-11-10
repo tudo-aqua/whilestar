@@ -50,7 +50,7 @@ data class VerificationCondition(val entailment: Entailment, var result: String 
     result =
         when (smtResult.status) {
           SatStatus.UNSAT -> "successful."
-          SatStatus.SAT -> "counterexample: ${smtResult.model}"
+          SatStatus.SAT -> "counterexample: ${smtResult.modelText()}"
           SatStatus.UNKNOWN -> "could not be decided.."
           SatStatus.PENDING -> "error during solving."
           SatStatus.ERROR -> "error during solving."

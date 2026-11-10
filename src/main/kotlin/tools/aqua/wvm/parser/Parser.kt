@@ -346,9 +346,11 @@ class Parser(restricted: Boolean = false) {
   fun parse(input: String): Context {
     val result = parser.parse(input)
     if (result.isFailure) {
-      var errLoc = result.buffer.substring(result.position)
-      errLoc = errLoc.substring(0, errLoc.indexOf("\n"))
-      throw Exception("${result.message} while parsing statement that starts in line: ${errLoc}")
+      val errLoc = result.buffer.substring(result.position)
+      // a parse error in the last line has no following newline, indexOf would return -1
+      val lineEnd = errLoc.indexOf("\n")
+      val shown = if (lineEnd < 0) errLoc else errLoc.substring(0, lineEnd)
+      throw Exception("${result.message} while parsing statement that starts in line: $shown")
     }
     return result.get()
   }

@@ -250,14 +250,8 @@ class WPCProofSystem(val context: Context, val output: Output) {
         Or(
             Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
             Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper)))
-    if (wpcInner is Forall) {
-      val wpcInnerExpr = wpcInner.expression as Or
-      return Forall(
-          boundVar,
-          Forall(wpcInner.boundVar, Or(Or(bounds, wpcInnerExpr.left), wpcInnerExpr.right)))
-    } else {
-      return Forall(boundVar, Or(bounds, wpcInner))
-    }
+    // the inner formula can itself be a Forall (several extern statements), no special case needed
+    return Forall(boundVar, Or(bounds, wpcInner))
   }
 
   private fun wpc(stmt: SequenceOfStatements, post: BooleanExpression): BooleanExpression {
@@ -301,7 +295,10 @@ class WPCProofSystem(val context: Context, val output: Output) {
       replacement: ArithmeticExpression
   ): ArithmeticExpression =
       when (phi) {
-        is ValAtAddr -> if (phi.addr is Variable && phi.addr.name == v.name) replacement else phi
+        // the substituted variable can also sit inside the address, e.g. arr[i] after i := 0
+        is ValAtAddr ->
+            if (phi.addr is Variable && phi.addr.name == v.name) replacement
+            else ValAtAddr(replace(phi.addr, v, replacement))
         is NumericLiteral -> NumericLiteral(phi.literal)
         is UnaryMinus -> UnaryMinus(replace(phi.negated, v, replacement))
         is Add -> Add(replace(phi.left, v, replacement), replace(phi.right, v, replacement))
@@ -371,6 +368,31 @@ class WPCProofSystem(val context: Context, val output: Output) {
         is Forall -> Forall(phi.boundVar, replace(phi.expression, v, replacement))
       }
 
+  private fun replace(
+      phi: AddressExpression,
+      v: Variable,
+      replacement: ArithmeticExpression
+  ): AddressExpression =
+      when (phi) {
+        is Variable -> phi
+        is DeRef -> DeRef(replace(phi.reference, v, replacement))
+        is ArrayAccess ->
+            ArrayAccess(
+                replace(phi.array, v, replacement) as ValAtAddr, replace(phi.index, v, replacement))
+        is ArrayRead ->
+            ArrayRead(
+                replace(phi.array, v, replacement) as ArrayExpression,
+                replace(phi.index, v, replacement))
+        is ArrayWrite ->
+            ArrayWrite(
+                replace(phi.array, v, replacement) as ArrayExpression,
+                replace(phi.index, v, replacement),
+                replace(phi.value, v, replacement))
+        is AnyArray -> phi
+        is AnyArrayPrimed -> phi
+        is NamedArray -> phi
+      }
+
   private fun replaceM(phi: BooleanExpression, write: ArrayWrite): BooleanExpression =
       when (phi) {
         is True -> phi
@@ -415,9 +437,11 @@ class WPCProofSystem(val context: Context, val output: Output) {
   ): BooleanExpression {
     var newPre = prepare(pre)
     if (newPre != True) return newPre
-    var addr = 0L
-    for (entry in scope.symbols) {
-      val value = if (entry.value.size == 1) 0 else addr + 1
+    // the initialization has to describe the layout the interpreter uses, i.e. the declared
+    // addresses, not the iteration order of the symbol map
+    for (entry in scope.symbols.entries.sortedBy { it.value.address }) {
+      val addr = entry.value.address.toLong()
+      val value = if (entry.value.size == 1) 0L else addr + 1
       newPre =
           And(
               newPre,
@@ -430,11 +454,10 @@ class WPCProofSystem(val context: Context, val output: Output) {
                       ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
                       NumericLiteral(value.toBigInteger()),
                       0)))
-      addr++
       if (entry.value.size > 1) {
+        val start = addr + 1
+        val end = addr + entry.value.size
         if (useQuantifiers) {
-          val start = addr
-          val end = addr + entry.value.size - 1
           val boundVar = Variable("i_${uniqueId++}")
           val range =
               And(
@@ -446,17 +469,15 @@ class WPCProofSystem(val context: Context, val output: Output) {
                   NumericLiteral(BigInteger.ZERO),
                   0)
           newPre = And(newPre, Forall(boundVar, Imply(range, init)))
-          addr += entry.value.size - 1
         } else {
-          for (i in 0 ..< entry.value.size - 1) {
+          for (cell in start until end) {
             newPre =
                 And(
                     newPre,
                     Eq(
-                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral(cell.toBigInteger()))),
                         NumericLiteral(BigInteger.ZERO),
                         0))
-            addr++
           }
         }
       }
@@ -482,7 +503,7 @@ class WPCProofSystem(val context: Context, val output: Output) {
       output.println(
           when (result.status) {
             SatStatus.UNSAT -> "successful."
-            SatStatus.SAT -> "counterexample: ${result.model}"
+            SatStatus.SAT -> "counterexample: ${result.modelText()}"
             SatStatus.UNKNOWN -> "could not be decided.."
             SatStatus.PENDING -> "error during solving."
             SatStatus.ERROR -> "error during solving."
