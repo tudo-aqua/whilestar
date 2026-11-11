@@ -41,15 +41,18 @@ class SMTSolver {
   class Result(
       val status: SatStatus,
       val model: Map<String, String>,
-      val modelAvailable: Boolean = true
+      val modelAvailable: Boolean = true,
+      val rawModelText: String? = null
   ) {
     fun modelText(): String =
-        if (modelAvailable) model.toSortedMap().toString()
-        else "(model not representable by konstraints)"
+        when {
+          modelAvailable -> model.toSortedMap().toString()
+          !rawModelText.isNullOrBlank() -> rawModelText
+          else -> "(model not representable by konstraints)"
+        }
   }
 
-  // the memory is declared on first use (see getArrayVar), so queries that do not mention it keep
-  // a printable model instead of the constant array that konstraints cannot serialize
+  // The memory array is declared lazily, so scalar-only queries can still produce printable models.
   var vars = mapOf<String, DeclareConst<*>>()
 
   companion object {
@@ -88,9 +91,7 @@ class SMTSolver {
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> getArrayVar(memArray)
-        is NamedArray -> {
-          getArrayVar(expr.name)
-        }
+        is NamedArray -> getArrayVar(expr.name)
         is ArrayRead ->
             ArraySelect(
                 asKonstraint(expr.array) as Expression<ArraySort<IntSort, IntSort>>,
@@ -135,8 +136,6 @@ class SMTSolver {
         is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
         is ValAtAddr -> asKonstraint(expr.addr)
         is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
-      // is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as
-      // Expression<IntSort>
       }
 
   fun asKonstraint(expr: BooleanExpression): Expression<BoolSort> =
@@ -160,10 +159,8 @@ class SMTSolver {
       }
 
   /**
-   * SMT-LIB integer division is Euclidean (0 <= mod < |divisor|), whereas the interpreter truncates
-   * towards zero (BigInteger.divide/rem). Both agree unless the dividend is negative and the
-   * division is inexact; then the quotient is moved one step towards zero and the remainder becomes
-   * negative.
+   * SMT-LIB integer division is Euclidean, whereas the interpreter truncates towards zero. For
+   * negative, inexact dividends, adjust the quotient and remainder to match BigInteger.
    */
   private fun truncatingDiv(
       dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
@@ -217,30 +214,48 @@ class SMTSolver {
     return try {
       runSolver(smtProgram, produceModel = true)
     } catch (e: Exception) {
-      // konstraints cannot convert every model Z3 returns: a constant array (the memory is one)
-      // makes the declaration map reject the model and the whole proof would fail. The
-      // satisfiability answer is already decided at that point, so ask once more without a model.
       val fallback = runSolver(smtProgram, produceModel = false)
       Result(fallback.status, emptyMap(), modelAvailable = false)
     }
   }
 
   private fun runSolver(smtProgram: SMTProgram, produceModel: Boolean): Result {
-    // counted here so that the repeated query of solve's fallback shows up as well
     numberOfSolveCalls++
-    val (status, solverModel) =
-        Z3Solver().let { solver ->
+    val solver = Z3Solver()
+    try {
+      val (status, solverModel) =
           try {
             solver.solve(smtProgram, produceModel = produceModel, timeout = solverTimeoutMs)
-          } finally {
-            solver.close()
+          } catch (e: Exception) {
+            if (produceModel && solver.status == SatStatus.SAT) {
+              return Result(
+                  SatStatus.SAT,
+                  emptyMap(),
+                  modelAvailable = false,
+                  rawModelText = rawModelText(solver))
+            }
+            throw e
           }
-        }
-    val model =
-        solverModel
-            ?.definitions
-            ?.map { (key, value) -> key.toString() to value.term.toString() }
-            ?.toMap() ?: emptyMap()
-    return Result(status, model)
+      if (produceModel && status == SatStatus.SAT && solverModel == null) {
+        return Result(
+            status, emptyMap(), modelAvailable = false, rawModelText = rawModelText(solver))
+      }
+      val model =
+          solverModel
+              ?.definitions
+              ?.map { (key, value) -> key.toString() to value.term.toString() }
+              ?.toMap() ?: emptyMap()
+      return Result(status, model)
+    } finally {
+      solver.close()
+    }
   }
+
+  private fun rawModelText(solver: Z3Solver): String? =
+      try {
+        val rawSolver = solver.javaClass.getMethod("getSolver").invoke(solver)
+        rawSolver.javaClass.getMethod("getModel").invoke(rawSolver)?.toString()
+      } catch (_: Exception) {
+        null
+      }
 }
