@@ -20,6 +20,8 @@ package tools.aqua.wvm.analysis.inductiveVerification
 
 import tools.aqua.konstraints.smt.SatStatus
 import tools.aqua.konstraints.util.reduceOrDefault
+import tools.aqua.wvm.analysis.VerificationResult
+import tools.aqua.wvm.analysis.VerificationStatus
 import tools.aqua.wvm.analysis.hoare.Entailment
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.language.And
@@ -48,44 +50,71 @@ class BMCSafetyChecker(
   /**
    * The function that performs the BMC safety check.
    *
-   * @return `true` if a counterexample is found (safety is violated), `false` otherwise.
+   * @return A concrete counterexample, or UNKNOWN if no counterexample is found within the bound.
    */
-  fun check(): Boolean {
-    for (bound in 0..maxBound) {
-      out.println("=== Checking ${bound}-safety: ===")
-      var initAndTransitions = transitionSystem.zeroedInitial()
-      if (bound > 0) {
-        val transitions =
-            (1..bound)
-                .map { transitionSystem.numberedTransitions(it - 1, it) }
+  fun check(): VerificationResult {
+    return try {
+      for (bound in 0..maxBound) {
+        out.println("=== Checking ${bound}-safety: ===")
+        var initAndTransitions = transitionSystem.zeroedInitial()
+        if (bound > 0) {
+          val transitions =
+              (1..bound)
+                  .map { transitionSystem.numberedTransitions(it - 1, it) }
+                  .reduceOrDefault(True) { acc, next -> And(acc, next) }
+          initAndTransitions = And(initAndTransitions, transitions)
+        }
+        val properties =
+            (0..bound)
+                .map { transitionSystem.numberedInvariant(it) }
                 .reduceOrDefault(True) { acc, next -> And(acc, next) }
-        initAndTransitions = And(initAndTransitions, transitions)
+        val test = Entailment(initAndTransitions, properties, "BMC safety check for bound $bound")
+        if (verbose) out.println("SMT test for BMC: $test")
+        val smtResult =
+            try {
+              SMTSolver().solve(test.smtTest())
+            } catch (e: Exception) {
+              val result =
+                  VerificationResult(
+                      VerificationStatus.UNKNOWN,
+                      "SMT solving failed at bound $bound.",
+                      bound,
+                      e.message ?: e.javaClass.simpleName)
+              out.println("BMC result: $result")
+              return result
+            }
+        val result =
+            when (smtResult.status) {
+              SatStatus.UNSAT -> null
+              SatStatus.SAT ->
+                  VerificationResult(
+                      VerificationStatus.UNSAFE,
+                      "Counterexample found.",
+                      bound,
+                      "Counterexample: ${smtResult.modelText()}")
+              SatStatus.UNKNOWN,
+              SatStatus.PENDING,
+              SatStatus.ERROR ->
+                  VerificationResult(
+                      VerificationStatus.UNKNOWN,
+                      "SMT solver returned ${smtResult.status} at bound $bound.",
+                      bound)
+            }
+        if (result != null) {
+          out.println("BMC result: $result")
+          return result
+        }
+        out.println("BMC result: $bound-safety has no counterexample.")
       }
-      val properties =
-          (0..bound)
-              .map { transitionSystem.numberedInvariant(it) }
-              .reduceOrDefault(True) { acc, next -> And(acc, next) }
-      val test = Entailment(initAndTransitions, properties, "BMC safety check for bound $bound")
-      if (verbose) out.println("SMT test for BMC: $test")
-      val result = SMTSolver().solve(test.smtTest())
-
-      out.println(
-          "BMC result: $bound-safety " +
-              when (result.status) {
-                SatStatus.UNSAT -> "is fulfilled."
-                SatStatus.SAT -> "is violated. Counterexample: ${result.model}"
-                SatStatus.UNKNOWN -> "could not be decided.."
-                SatStatus.PENDING -> "exited with an error during solving."
-                SatStatus.ERROR -> "exited with an error during solving."
-              })
-      when (result.status) {
-        SatStatus.UNSAT -> {} // Continue checking
-        SatStatus.SAT -> return true
-        SatStatus.UNKNOWN -> return false
-        SatStatus.PENDING -> return false
-        SatStatus.ERROR -> return false
-      }
+      VerificationResult(
+          VerificationStatus.UNKNOWN,
+          "No counterexample found through the BMC bound; unbounded safety was not proved.",
+          maxBound)
+    } catch (e: Exception) {
+      VerificationResult(
+          VerificationStatus.UNKNOWN,
+          "Could not complete bounded model checking.",
+          details = e.message ?: e.javaClass.simpleName)
     }
-    return false
   }
 }

@@ -100,19 +100,20 @@ class TransitionSystem(
   }
 
   private fun initVars(): BooleanExpression {
-    var memIndex = 0
     return context.scope.symbols
         .map {
+          // Pin each variable's SMT constant to its *runtime* static address
+          // (Scope.resolve / ElementInfo.address, declaration order), NOT to a local
+          // counter over the HashMap. A permuted layout would make &x resolve to the
+          // wrong address compared to the WVM runtime.
+          val addr = context.scope.resolve(it.key)
           when {
             it.value.type == BasicType.INT -> // integer variable initialized to 0
-            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0)
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(addr.toBigInteger()), 0)
             it.value.type is Pointer && it.value.size == 1 -> // pointer to integer initialized to 0
-            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0)
-            it.value.size > 1 -> { // array initialized to 0
-              val eq = Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0)
-              memIndex += it.value.size
-              eq
-            }
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(addr.toBigInteger()), 0)
+            it.value.size > 1 -> // array initialized to 0
+            Eq(ValAtAddr(Variable(it.key)), NumericLiteral(addr.toBigInteger()), 0)
             else ->
                 throw Exception("Unsupported variable type in transition system initial condition.")
           }
@@ -121,37 +122,42 @@ class TransitionSystem(
   }
 
   private fun initMemory(): BooleanExpression {
-    var memIndex = 0
     return context.scope.symbols
         .map {
+          // Pin each variable's SMT constant to its *runtime* static address
+          // (Scope.resolve / ElementInfo.address, declaration order) so the TS memory
+          // layout matches the WVM runtime. A local counter over the HashMap would
+          // permute the layout and make &x resolve to the wrong address.
+          val addr = context.scope.resolve(it.key)
           when {
             it.value.type == BasicType.INT ->
                 listOf( // integer variable initialized to 0
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0),
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(addr.toBigInteger()), 0),
                     Eq(
                         ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
                         NumericLiteral(0.toBigInteger()),
                         0))
             it.value.type is Pointer && it.value.size == 1 ->
                 listOf( // pointer to integer initialized to 0
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex++.toBigInteger()), 0),
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(addr.toBigInteger()), 0),
                     Eq(
                         ValAtAddr(ArrayRead(AnyArray, ValAtAddr(Variable(it.key)))),
                         NumericLiteral(0.toBigInteger()),
                         0))
             it.value.size > 1 ->
-                listOf( // array initialized to 0
-                    // TODO: Maybe change this to variable instead of index notation as well.
-                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(memIndex.toBigInteger()), 0),
+                listOf( // array: base pointer cell + data cells, all at runtime addresses
+                    Eq(ValAtAddr(Variable(it.key)), NumericLiteral(addr.toBigInteger()), 0),
                     Eq(
-                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral((memIndex).toBigInteger()))),
-                        NumericLiteral(((memIndex++) + 1).toBigInteger()),
+                        // base pointer cell = address + 1 (matches Context.initMemForScope)
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
+                        NumericLiteral((addr + 1).toBigInteger()),
                         0),
-                    (0 until it.value.size - 1)
-                        .map {
+                    (1 until it.value.size)
+                        .map { offset ->
                           Eq(
                               ValAtAddr(
-                                  ArrayRead(AnyArray, NumericLiteral((memIndex++).toBigInteger()))),
+                                  ArrayRead(
+                                      AnyArray, NumericLiteral((addr + offset).toBigInteger()))),
                               NumericLiteral(0.toBigInteger()),
                               0)
                         }

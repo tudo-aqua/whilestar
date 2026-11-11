@@ -18,6 +18,7 @@
 
 package tools.aqua.wvm.analysis.hoare
 
+import java.math.BigInteger
 import tools.aqua.konstraints.dsl.UserDeclaredSMTFunction0
 import tools.aqua.konstraints.smt.*
 import tools.aqua.konstraints.smt.Expression
@@ -37,15 +38,21 @@ class SMTSolver {
   private val intSort: IntSort = SMTInt
   private val memSort = SMTArray(intSort, intSort)
 
-  class Result(val status: SatStatus, val model: Map<String, String>)
+  class Result(
+      val status: SatStatus,
+      val model: Map<String, String>,
+      val modelAvailable: Boolean = true,
+      val rawModelText: String? = null
+  ) {
+    fun modelText(): String =
+        when {
+          modelAvailable -> model.toSortedMap().toString()
+          !rawModelText.isNullOrBlank() -> rawModelText
+          else -> "(model not representable by konstraints)"
+        }
+  }
 
-  // The memory array constant [memArray] ("M_") is NOT declared
-  // unconditionally. It is declared lazily in [getArrayVar] as soon as the
-  // verification condition actually contains an array expression (e.g. an
-  // [AnyArray] node). Declaring it unconditionally would crash the Z3 model
-  // extraction for SAT (failed proof) results, since an unconstrained
-  // constant has no interpretation in the produced model (konstraints-z3
-  // NPE on getConstInterp).
+  // The memory array is declared lazily, so scalar-only queries can still produce printable models.
   var vars = mapOf<String, DeclareConst<*>>()
 
   companion object {
@@ -84,9 +91,7 @@ class SMTSolver {
   fun asKonstraint(expr: ArrayExpression): Expression<*> =
       when (expr) {
         is AnyArray -> getArrayVar(memArray)
-        is NamedArray -> {
-          getArrayVar(expr.name)
-        }
+        is NamedArray -> getArrayVar(expr.name)
         is ArrayRead ->
             ArraySelect(
                 asKonstraint(expr.array) as Expression<ArraySort<IntSort, IntSort>>,
@@ -124,15 +129,13 @@ class SMTSolver {
               IntLiteral(expr.literal)
             }
         is Add -> IntAdd(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Div -> IntDiv(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
+        is Div -> truncatingDiv(asKonstraint(expr.left), asKonstraint(expr.right))
         is Mul -> IntMul(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
-        is Rem -> Mod(asKonstraint(expr.left), asKonstraint(expr.right))
+        is Rem -> truncatingRem(asKonstraint(expr.left), asKonstraint(expr.right))
         is Sub -> IntSub(listOf(asKonstraint(expr.left), asKonstraint(expr.right)))
         is UnaryMinus -> IntNeg(asKonstraint(expr.negated))
         is ValAtAddr -> asKonstraint(expr.addr)
         is VarAddress -> throw Exception("WPC Proof System cannot compute with var address ${expr}")
-      // is ArrayRead -> ArraySelect(asKonstraint(expr.array), asKonstraint(expr.index)) as
-      // Expression<IntSort>
       }
 
   fun asKonstraint(expr: BooleanExpression): Expression<BoolSort> =
@@ -155,72 +158,104 @@ class SMTSolver {
                 asKonstraint(expr.expression))
       }
 
+  /**
+   * SMT-LIB integer division is Euclidean, whereas the interpreter truncates towards zero.
+   * For negative, inexact dividends, adjust the quotient and remainder to match BigInteger.
+   */
+  private fun truncatingDiv(
+      dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val quotient = IntDiv(listOf(dividend, divisor))
+    val adjust = negativeDividendAndRemainder(dividend, divisor)
+    return Ite(adjust, IntAdd(listOf(quotient, divisorSign(divisor))), quotient)
+  }
+
+  private fun truncatingRem(
+      dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val remainder = Mod(dividend, divisor)
+    val adjust = negativeDividendAndRemainder(dividend, divisor)
+    return Ite(adjust, IntSub(listOf(remainder, absolute(divisor))), remainder)
+  }
+
+  private fun negativeDividendAndRemainder(
+      dividend: tools.aqua.konstraints.smt.Expression<IntSort>,
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<BoolSort> {
+    val zero = IntLiteral(BigInteger.ZERO)
+    val dividendNegative = IntLess(listOf(dividend, zero))
+    val remainder = tools.aqua.konstraints.smt.Not(Equals(Mod(dividend, divisor), zero))
+    return tools.aqua.konstraints.smt.And(dividendNegative, remainder)
+  }
+
+  private fun divisorSign(
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val zero = IntLiteral(BigInteger.ZERO)
+    return Ite(
+        IntGreater(listOf(divisor, zero)),
+        IntLiteral(BigInteger.ONE),
+        IntNeg(IntLiteral(BigInteger.ONE)))
+  }
+
+  private fun absolute(
+      divisor: tools.aqua.konstraints.smt.Expression<IntSort>
+  ): tools.aqua.konstraints.smt.Expression<IntSort> {
+    val zero = IntLiteral(BigInteger.ZERO)
+    return Ite(IntLess(listOf(divisor, zero)), IntNeg(divisor), divisor)
+  }
+
   fun solve(expr: BooleanExpression): Result {
     val konstraint = asKonstraint(expr)
     val commands = listOf<Command>(SetLogic(AUFLIA)) + vars.values + Assert(konstraint)
     val smtProgram = DefaultSMTProgram(commands)
+    return try {
+      runSolver(smtProgram, produceModel = true)
+    } catch (e: Exception) {
+      val fallback = runSolver(smtProgram, produceModel = false)
+      Result(fallback.status, emptyMap(), modelAvailable = false)
+    }
+  }
+
+  private fun runSolver(smtProgram: SMTProgram, produceModel: Boolean): Result {
+    numberOfSolveCalls++
     val solver = Z3Solver()
     try {
-      numberOfSolveCalls++
       val (status, solverModel) =
-          solver.solve(smtProgram, produceModel = true, timeout = solverTimeoutMs)
+          try {
+            solver.solve(smtProgram, produceModel = produceModel, timeout = solverTimeoutMs)
+          } catch (e: Exception) {
+            if (produceModel && solver.status == SatStatus.SAT) {
+              return Result(
+                  SatStatus.SAT,
+                  emptyMap(),
+                  modelAvailable = false,
+                  rawModelText = rawModelText(solver))
+            }
+            throw e
+          }
+      if (produceModel && status == SatStatus.SAT && solverModel == null) {
+        return Result(
+            status, emptyMap(), modelAvailable = false, rawModelText = rawModelText(solver))
+      }
       val model =
           solverModel
               ?.definitions
               ?.map { (key, value) -> key.toString() to value.term.toString() }
               ?.toMap() ?: emptyMap()
       return Result(status, model)
-    } catch (e: Exception) {
-      // Safety net: konstraints-z3 can crash while converting the Z3 model into an
-      // aqua model even though solving itself succeeded (e.g. an NPE when a declared
-      // constant such as [memArray] is unconstrained, or a RuntimeException when the
-      // model represents an array as a constant array). Z3Solver sets its status right
-      // after check() and only then starts model extraction, so a non-PENDING status
-      // here means the solve result is valid and only the model extraction failed.
-      // The model is only used for string display by the callers, so we fall back to
-      // a best-effort model extracted directly from the raw Z3 API.
-      if (solver.status == SatStatus.PENDING) {
-        throw e
-      }
-      System.err.println(
-          "WARNING: Z3 model extraction failed after solving (status ${solver.status}): " +
-              "${e.javaClass.simpleName}: ${e.message}")
-      return Result(solver.status, extractRawModel(solver))
     } finally {
       solver.close()
     }
   }
 
-  /**
-   * Best-effort model extraction using the raw Z3 API. Used as a fallback when the model conversion
-   * of konstraints-z3 crashes. The values are rendered using Z3's own toString (SMT-LIB style),
-   * which is sufficient for the string-only display use cases of the model.
-   */
-  private fun extractRawModel(solver: Z3Solver): Map<String, String> {
-    return try {
-      val rawModel = solver.solver.model ?: return emptyMap()
-      rawModel.decls.associate { decl -> decl.name.toString() to rawModelValue(rawModel, decl) }
-    } catch (e: Exception) {
-      emptyMap()
-    }
-  }
-
-  private fun rawModelValue(
-      rawModel: com.microsoft.z3.Model,
-      decl: com.microsoft.z3.FuncDecl<*>
-  ): String {
-    return try {
-      when (decl.arity) {
-        0 ->
-            try {
-              rawModel.getConstInterp(decl)?.toString()
-            } catch (e: Exception) {
-              rawModel.getFuncInterp(decl)?.toString()
-            }
-        else -> rawModel.getFuncInterp(decl)?.toString()
-      } ?: "(no interpretation)"
-    } catch (e: Exception) {
-      "(no interpretation)"
-    }
-  }
+  private fun rawModelText(solver: Z3Solver): String? =
+      try {
+        val rawSolver = solver.javaClass.getMethod("getSolver").invoke(solver)
+        rawSolver.javaClass.getMethod("getModel").invoke(rawSolver)?.toString()
+      } catch (_: Exception) {
+        null
+      }
 }

@@ -20,6 +20,8 @@ package tools.aqua.wvm.analysis.hoare
 
 import java.math.BigInteger
 import tools.aqua.konstraints.smt.SatStatus
+import tools.aqua.wvm.analysis.VerificationResult
+import tools.aqua.wvm.analysis.VerificationStatus
 import tools.aqua.wvm.language.*
 import tools.aqua.wvm.machine.Context
 import tools.aqua.wvm.machine.Output
@@ -250,14 +252,8 @@ class WPCProofSystem(val context: Context, val output: Output) {
         Or(
             Lt(ValAtAddr(boundVar), NumericLiteral(stmt.lower)),
             Gte(ValAtAddr(boundVar), NumericLiteral(stmt.upper)))
-    if (wpcInner is Forall) {
-      val wpcInnerExpr = wpcInner.expression as Or
-      return Forall(
-          boundVar,
-          Forall(wpcInner.boundVar, Or(Or(bounds, wpcInnerExpr.left), wpcInnerExpr.right)))
-    } else {
-      return Forall(boundVar, Or(bounds, wpcInner))
-    }
+    // the inner formula can itself be a Forall (several extern statements), no special case needed
+    return Forall(boundVar, Or(bounds, wpcInner))
   }
 
   private fun wpc(stmt: SequenceOfStatements, post: BooleanExpression): BooleanExpression {
@@ -301,7 +297,15 @@ class WPCProofSystem(val context: Context, val output: Output) {
       replacement: ArithmeticExpression
   ): ArithmeticExpression =
       when (phi) {
-        is ValAtAddr -> if (phi.addr is Variable && phi.addr.name == v.name) replacement else phi
+        // the substituted variable can also sit inside the address, e.g. arr[i] after i := 0
+        is ValAtAddr ->
+            if (phi.addr is Variable && phi.addr.name == v.name) replacement
+            else if (context.scope.defines(v.name) &&
+                phi.addr is ArrayRead &&
+                isMemoryArray(phi.addr.array) &&
+                phi.addr.index == NumericLiteral(context.scope.resolve(v.name).toBigInteger()))
+                replacement
+            else ValAtAddr(replace(phi.addr, v, replacement))
         is NumericLiteral -> NumericLiteral(phi.literal)
         is UnaryMinus -> UnaryMinus(replace(phi.negated, v, replacement))
         is Add -> Add(replace(phi.left, v, replacement), replace(phi.right, v, replacement))
@@ -315,7 +319,14 @@ class WPCProofSystem(val context: Context, val output: Output) {
   private fun replaceM(phi: ArithmeticExpression, write: ArrayWrite): ArithmeticExpression =
       when (phi) {
         is ValAtAddr -> {
-          val newAddr = replaceM(phi.addr, write)
+          val memoryLocation =
+              if (phi.addr is Variable && context.scope.defines(phi.addr.name)) {
+                ArrayRead(
+                    AnyArray, NumericLiteral(context.scope.resolve(phi.addr.name).toBigInteger()))
+              } else {
+                phi.addr
+              }
+          val newAddr = replaceM(memoryLocation, write)
           if (simplify &&
               newAddr is ArrayRead &&
               newAddr.array == write &&
@@ -345,7 +356,14 @@ class WPCProofSystem(val context: Context, val output: Output) {
         is Mul -> Mul(prepare(phi.left), prepare(phi.right))
         is Div -> Div(prepare(phi.left), prepare(phi.right))
         is Rem -> Rem(prepare(phi.left), prepare(phi.right))
-        is VarAddress -> throw Exception("expression ($phi) not supported by proof system.")
+        is VarAddress -> NumericLiteral(context.scope.resolve(phi.variable.name).toBigInteger())
+      }
+
+  private fun isMemoryArray(array: ArrayExpression): Boolean =
+      when (array) {
+        is AnyArray -> true
+        is ArrayWrite -> isMemoryArray(array.array)
+        else -> false
       }
 
   private fun replace(
@@ -369,6 +387,31 @@ class WPCProofSystem(val context: Context, val output: Output) {
         is Or -> Or(replace(phi.left, v, replacement), replace(phi.right, v, replacement))
         // since bound vars are never program vars, we only need to replace on expression
         is Forall -> Forall(phi.boundVar, replace(phi.expression, v, replacement))
+      }
+
+  private fun replace(
+      phi: AddressExpression,
+      v: Variable,
+      replacement: ArithmeticExpression
+  ): AddressExpression =
+      when (phi) {
+        is Variable -> phi
+        is DeRef -> DeRef(replace(phi.reference, v, replacement))
+        is ArrayAccess ->
+            ArrayAccess(
+                replace(phi.array, v, replacement) as ValAtAddr, replace(phi.index, v, replacement))
+        is ArrayRead ->
+            ArrayRead(
+                replace(phi.array, v, replacement) as ArrayExpression,
+                replace(phi.index, v, replacement))
+        is ArrayWrite ->
+            ArrayWrite(
+                replace(phi.array, v, replacement) as ArrayExpression,
+                replace(phi.index, v, replacement),
+                replace(phi.value, v, replacement))
+        is AnyArray -> phi
+        is AnyArrayPrimed -> phi
+        is NamedArray -> phi
       }
 
   private fun replaceM(phi: BooleanExpression, write: ArrayWrite): BooleanExpression =
@@ -415,9 +458,11 @@ class WPCProofSystem(val context: Context, val output: Output) {
   ): BooleanExpression {
     var newPre = prepare(pre)
     if (newPre != True) return newPre
-    var addr = 0L
-    for (entry in scope.symbols) {
-      val value = if (entry.value.size == 1) 0 else addr + 1
+    // the initialization has to describe the layout the interpreter uses, i.e. the declared
+    // addresses, not the iteration order of the symbol map
+    for (entry in scope.symbols.entries.sortedBy { it.value.address }) {
+      val addr = entry.value.address.toLong()
+      val value = if (entry.value.size == 1) 0L else addr + 1
       newPre =
           And(
               newPre,
@@ -430,11 +475,10 @@ class WPCProofSystem(val context: Context, val output: Output) {
                       ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
                       NumericLiteral(value.toBigInteger()),
                       0)))
-      addr++
       if (entry.value.size > 1) {
+        val start = addr + 1
+        val end = addr + entry.value.size
         if (useQuantifiers) {
-          val start = addr
-          val end = addr + entry.value.size - 1
           val boundVar = Variable("i_${uniqueId++}")
           val range =
               And(
@@ -446,17 +490,15 @@ class WPCProofSystem(val context: Context, val output: Output) {
                   NumericLiteral(BigInteger.ZERO),
                   0)
           newPre = And(newPre, Forall(boundVar, Imply(range, init)))
-          addr += entry.value.size - 1
         } else {
-          for (i in 0 ..< entry.value.size - 1) {
+          for (cell in start until end) {
             newPre =
                 And(
                     newPre,
                     Eq(
-                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral(addr.toBigInteger()))),
+                        ValAtAddr(ArrayRead(AnyArray, NumericLiteral(cell.toBigInteger()))),
                         NumericLiteral(BigInteger.ZERO),
                         0))
-            addr++
           }
         }
       }
@@ -464,70 +506,125 @@ class WPCProofSystem(val context: Context, val output: Output) {
     return newPre
   }
 
-  fun proof(): Boolean {
+  fun proof(): VerificationResult {
     simplify = false
-    val pre = augment(context.pre, context.scope)
-    val vcs = vcgen(pre, context.program, prepare(context.post))
-    output.println("==== generating verification conditions: ====")
-    var success = true
-    vcs.forEach { output.println("$it") }
-    for (vc in vcs) {
-      output.println("---------------------------------------------")
-      output.println("${vc.explanation}:")
-      val expr = vc.smtTest()
-      output.println("SMT Test: $expr")
-      val solver = SMTSolver()
-      val result = solver.solve(vc.smtTest())
-      success = success and (result.status == SatStatus.UNSAT)
-      output.println(
-          when (result.status) {
-            SatStatus.UNSAT -> "successful."
-            SatStatus.SAT -> "counterexample: ${result.model}"
-            SatStatus.UNKNOWN -> "could not be decided.."
-            SatStatus.PENDING -> "error during solving."
-            SatStatus.ERROR -> "error during solving."
-          })
-
-      if (result.status != SatStatus.UNSAT) {
-        success = false
-      }
-    }
-    output.println("=============================================")
-    output.println("The proof was ${if (success) "" else "not "}successful.")
-    return success
-  }
-
-  fun proof(proofTable: MutableList<ProofTableRow>): Boolean {
-    simplify = true
-    val pre = augment(context.pre, context.scope, useQuantifiers = true)
-    vcgen(pre, context.program, prepare(context.post), proofTable)
-    var success = true
-
-    for (vc in proofTable.flatMap { it.vcs }) {
-      val status = vc.solve()
-      success = success and (status == SatStatus.UNSAT)
-    }
-    if (proofTable.size > 1) {
-      proofTable[1].commentWPC = "wpc of program"
-      proofTable[0].wpc = ""
-    }
-    proofTable.last().post = context.post.toString()
-    proofTable.first().wpc = ""
-    // println(proofTable.toString())
-    // output.println("The proof was ${if (success) "" else "not "}successful.")
-    return success
-  }
-
-  /**
-   * Computes the weakest precondition of the program for the given postcondition. If no weakest
-   * precondition can be derived (e.g. a loop invariant is not valid for the loop body), null is
-   * returned.
-   */
-  fun weakestPrecondition(post: BooleanExpression): BooleanExpression? {
     return try {
-      wpc(SequenceOfStatements(context.program), prepare(post))
+      val pre = augment(context.pre, context.scope)
+      val vcs = vcgen(pre, context.program, prepare(context.post))
+      output.println("==== generating verification conditions: ====")
+      val statuses = mutableListOf<SatStatus>()
+      var failedCondition: String? = null
+      var counterexample: String? = null
+      var solverError: String? = null
+      vcs.forEach { output.println("$it") }
+      for (vc in vcs) {
+        output.println("---------------------------------------------")
+        output.println("${vc.explanation}:")
+        val expr = vc.smtTest()
+        output.println("SMT Test: $expr")
+        val result =
+            try {
+              SMTSolver().solve(expr)
+            } catch (e: Exception) {
+              solverError = e.message ?: e.javaClass.simpleName
+              statuses.add(SatStatus.ERROR)
+              output.println("error during solving: $solverError")
+              continue
+            }
+        statuses.add(result.status)
+        output.println(
+            when (result.status) {
+              SatStatus.UNSAT -> "successful."
+              SatStatus.SAT -> "counterexample: ${result.modelText()}"
+              SatStatus.UNKNOWN -> "could not be decided."
+              SatStatus.PENDING,
+              SatStatus.ERROR -> "error during solving."
+            })
+        if (result.status == SatStatus.SAT && failedCondition == null) {
+          failedCondition = vc.explanation
+          counterexample = result.modelText()
+        }
+        if ((result.status == SatStatus.PENDING || result.status == SatStatus.ERROR) &&
+            solverError == null) {
+          solverError = "Solver returned ${result.status}."
+        }
+      }
+      output.println("=============================================")
+      val result = wpcResult(statuses, failedCondition, counterexample, solverError)
+      output.println("The proof result is $result")
+      result
     } catch (e: Exception) {
-      null
+      VerificationResult(
+          VerificationStatus.UNKNOWN,
+          "Could not generate or solve the Hoare verification conditions.",
+          details = e.message ?: e.javaClass.simpleName)
     }
   }
+
+  fun proof(proofTable: MutableList<ProofTableRow>): Boolean =
+      proofResult(proofTable).status == VerificationStatus.SAFE
+
+  fun proofResult(proofTable: MutableList<ProofTableRow>): VerificationResult {
+    simplify = true
+    return try {
+      val pre = augment(context.pre, context.scope, useQuantifiers = true)
+      vcgen(pre, context.program, prepare(context.post), proofTable)
+      val statuses = mutableListOf<SatStatus>()
+      var failedCondition: String? = null
+      var counterexample: String? = null
+      var solverError: String? = null
+
+      for (vc in proofTable.flatMap { it.vcs }) {
+        val status =
+            try {
+              vc.solve()
+            } catch (e: Exception) {
+              solverError = e.message ?: e.javaClass.simpleName
+              SatStatus.ERROR
+            }
+        statuses.add(status)
+        if (status == SatStatus.SAT && failedCondition == null) {
+          failedCondition = vc.explanation
+          counterexample = vc.result.substringAfter("counterexample:", "").trim()
+        }
+        if ((status == SatStatus.PENDING || status == SatStatus.ERROR) && solverError == null) {
+          solverError = "Solver returned $status."
+        }
+      }
+      val result = wpcResult(statuses, failedCondition, counterexample, solverError)
+      proofTable.last().post = context.post.toString()
+      proofTable.first().wpc = ""
+      if (proofTable.size > 1) {
+        proofTable[1].commentWPC = "wpc of program"
+      }
+      result
+    } catch (e: Exception) {
+      VerificationResult(
+          VerificationStatus.UNKNOWN,
+          "Could not generate or solve the Hoare verification conditions.",
+          details = e.message ?: e.javaClass.simpleName)
+    }
+  }
+
+  private fun wpcResult(
+      statuses: List<SatStatus>,
+      failedCondition: String?,
+      counterexample: String?,
+      solverError: String?
+  ): VerificationResult =
+      when {
+        failedCondition != null ->
+            VerificationResult(
+                VerificationStatus.UNSAFE,
+                "Hoare verification condition is not valid: $failedCondition",
+                details = counterexample)
+        solverError != null || statuses.any { it != SatStatus.UNSAT } ->
+            VerificationResult(
+                VerificationStatus.UNKNOWN,
+                "Could not decide whether all Hoare verification conditions are valid.",
+                details = solverError)
+        else ->
+            VerificationResult(
+                VerificationStatus.SAFE, "All Hoare verification conditions are valid.")
+      }
 }
