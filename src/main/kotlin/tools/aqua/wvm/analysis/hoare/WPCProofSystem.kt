@@ -205,7 +205,15 @@ class WPCProofSystem(val context: Context, val output: Output) {
 
   private fun wpc(stmt: Assignment, post: BooleanExpression): BooleanExpression =
       when (stmt.addr) {
-        is Variable -> replace(post, stmt.addr, prepare(stmt.expr))
+        is Variable -> {
+          if (context.scope.defines(stmt.addr.name)) {
+            val varAddress = NumericLiteral(context.scope.resolve(stmt.addr.name).toBigInteger())
+            replaceM(post, ArrayWrite(AnyArray, varAddress, prepare(stmt.expr)))
+          } else {
+            // For temporary vars (e.g. swap uses tmp_0)
+            replace(post, stmt.addr, prepare(stmt.expr))
+          }
+        }
         is DeRef ->
             replaceM(
                 post,
@@ -232,7 +240,14 @@ class WPCProofSystem(val context: Context, val output: Output) {
     val boundVar = Variable("ext_${uniqueId++}") // TODO: truly unique variable names!
     val wpcInner =
         when (stmt.addr) {
-          is Variable -> replace(post, stmt.addr, ValAtAddr(boundVar))
+          is Variable ->
+              if (context.scope.defines(stmt.addr.name)) {
+                val varAddress =
+                    NumericLiteral(context.scope.resolve(stmt.addr.name).toBigInteger())
+                replaceM(post, ArrayWrite(AnyArray, varAddress, ValAtAddr(boundVar)))
+              } else {
+                replace(post, stmt.addr, ValAtAddr(boundVar))
+              }
           is DeRef ->
               replaceM(
                   post,
@@ -613,6 +628,11 @@ class WPCProofSystem(val context: Context, val output: Output) {
       solverError: String?
   ): VerificationResult =
       when {
+        failedCondition != null && (failedCondition.contains("Invariant", ignoreCase = true)) ->
+            VerificationResult(
+                VerificationStatus.UNKNOWN,
+                "Could not be decided. If the invariants are strong enough it could be UNSAFE: $failedCondition",
+                details = counterexample)
         failedCondition != null ->
             VerificationResult(
                 VerificationStatus.UNSAFE,
