@@ -346,11 +346,15 @@ class Parser(restricted: Boolean = false) {
   fun parse(input: String): Context {
     val result = parser.parse(input)
     if (result.isFailure) {
-      val errLoc = result.buffer.substring(result.position)
+      val position = minOf(result.position, input.length)
+      // count newlines before the failure position to get the 1-based line number
+      val lineNumber = input.substring(0, position).count { it == '\n' } + 1
+      val errLoc = result.buffer.substring(position)
       // a parse error in the last line has no following newline, indexOf would return -1
       val lineEnd = errLoc.indexOf("\n")
       val shown = if (lineEnd < 0) errLoc else errLoc.substring(0, lineEnd)
-      throw Exception("${result.message} while parsing statement that starts in line: $shown")
+      throw Exception(
+          "Syntax error on line $lineNumber: ${result.message} while parsing statement that starts in line: $shown")
     }
     return result.get()
   }
