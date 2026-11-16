@@ -363,7 +363,15 @@ class WPCProofSystem(val context: Context, val output: Output) {
 
   private fun prepare(phi: ArithmeticExpression): ArithmeticExpression =
       when (phi) {
-        is ValAtAddr -> ValAtAddr(prepare(phi.addr))
+        is ValAtAddr ->
+            if (phi.addr is Variable && context.scope.defines(phi.addr.name)) {
+              ValAtAddr(
+                  ArrayRead(
+                      AnyArray,
+                      NumericLiteral(context.scope.resolve(phi.addr.name).toBigInteger())))
+            } else {
+              ValAtAddr(prepare(phi.addr))
+            }
         is NumericLiteral -> NumericLiteral(phi.literal)
         is UnaryMinus -> UnaryMinus(prepare(phi.negated))
         is Add -> Add(prepare(phi.left), prepare(phi.right))
@@ -547,6 +555,9 @@ class WPCProofSystem(val context: Context, val output: Output) {
               continue
             }
         statuses.add(result.status)
+        if (result.timedOut && solverError == null) {
+          solverError = "Solver timed out after 5000 ms."
+        }
         output.println(
             when (result.status) {
               SatStatus.UNSAT -> "successful."
@@ -598,6 +609,9 @@ class WPCProofSystem(val context: Context, val output: Output) {
               SatStatus.ERROR
             }
         statuses.add(status)
+        if (vc.timedOut && solverError == null) {
+          solverError = "Solver timed out after 5000 ms."
+        }
         if (status == SatStatus.SAT && failedCondition == null) {
           failedCondition = vc.explanation
           counterexample = vc.result.substringAfter("counterexample:", "").trim()
@@ -655,7 +669,13 @@ class WPCProofSystem(val context: Context, val output: Output) {
    */
   fun weakestPrecondition(post: BooleanExpression): BooleanExpression? {
     return try {
-      wpc(SequenceOfStatements(context.program), prepare(post))
+      val preparedPost = prepare(post)
+      val sideConditions = vcgen(SequenceOfStatements(context.program), preparedPost)
+      if (sideConditions.any { SMTSolver().solve(it.smtTest()).status != SatStatus.UNSAT }) {
+        null
+      } else {
+        wpc(SequenceOfStatements(context.program), preparedPost)
+      }
     } catch (e: Exception) {
       null
     }

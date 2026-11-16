@@ -37,6 +37,8 @@ data class Entailment(
 }
 
 data class VerificationCondition(val entailment: Entailment, var result: String = "not solved") {
+  var timedOut: Boolean = false
+
   val explanation: String
     get() = entailment.explanation
 
@@ -47,6 +49,7 @@ data class VerificationCondition(val entailment: Entailment, var result: String 
   fun solve(): SatStatus {
     val solver = SMTSolver()
     val smtResult = solver.solve(entailment.smtTest())
+    timedOut = smtResult.timedOut
     result =
         when (smtResult.status) {
           SatStatus.UNSAT -> "successful."

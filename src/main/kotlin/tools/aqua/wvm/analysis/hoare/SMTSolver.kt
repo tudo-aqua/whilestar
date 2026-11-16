@@ -42,7 +42,8 @@ class SMTSolver {
       val status: SatStatus,
       val model: Map<String, String>,
       val modelAvailable: Boolean = true,
-      val rawModelText: String? = null
+      val rawModelText: String? = null,
+      val timedOut: Boolean = false
   ) {
     fun modelText(): String =
         when {
@@ -222,6 +223,7 @@ class SMTSolver {
   private fun runSolver(smtProgram: SMTProgram, produceModel: Boolean): Result {
     numberOfSolveCalls++
     val solver = Z3Solver()
+    val startedAt = System.nanoTime()
     try {
       val (status, solverModel) =
           try {
@@ -245,7 +247,8 @@ class SMTSolver {
               ?.definitions
               ?.map { (key, value) -> key.toString() to value.term.toString() }
               ?.toMap() ?: emptyMap()
-      return Result(status, model)
+      val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+      return Result(status, model, timedOut = status == SatStatus.UNKNOWN && elapsedMs >= solverTimeoutMs)
     } finally {
       solver.close()
     }
