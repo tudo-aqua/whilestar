@@ -248,7 +248,8 @@ class SMTSolver {
               ?.map { (key, value) -> key.toString() to value.term.toString() }
               ?.toMap() ?: emptyMap()
       val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-      return Result(status, model, timedOut = status == SatStatus.UNKNOWN && elapsedMs >= solverTimeoutMs)
+      return Result(
+          status, model, timedOut = status == SatStatus.UNKNOWN && elapsedMs >= solverTimeoutMs)
     } finally {
       solver.close()
     }

@@ -28,11 +28,10 @@ import tools.aqua.wvm.machine.Output
 import tools.aqua.wvm.parser.Parser
 
 /**
- * Regression tests for four WPC proof-system bugs, plus a deterministic fuzz
- * consistency check. Each bug is documented with the *correct* expected
- * behavior. Bugs that were fixed are asserted to pass; bugs that are still open
- * on this branch are asserted against the correct behavior as well and are
- * expected to fail, thereby documenting the outstanding defect.
+ * Regression tests for four WPC proof-system bugs, plus a deterministic fuzz consistency check.
+ * Each bug is documented with the *correct* expected behavior. Bugs that were fixed are asserted to
+ * pass; bugs that are still open on this branch are asserted against the correct behavior as well
+ * and are expected to fail, thereby documenting the outstanding defect.
  */
 class WPCBugRegressionTest {
 
@@ -72,7 +71,8 @@ class WPCBugRegressionTest {
               a := 1;
               *p := 5;
             post: (a = 5)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
 
   @Test
@@ -90,7 +90,8 @@ class WPCBugRegressionTest {
               a := 1;
               *p := 5;
             post: (a = 1)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
 
   // -- Bug 2: invariant VC on a loop that is never entered -------------------
@@ -112,7 +113,8 @@ class WPCBugRegressionTest {
                 x := x + 1;
               };
             post: (x = 0)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
 
   @Test
@@ -131,9 +133,9 @@ class WPCBugRegressionTest {
                 x := x - 1;
               };
             post: (x = 3)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
-
 
   // -- Bug 3: non-`True` precondition skips the scalar<->memory link ----------
   // `augment` used to return early when the incoming precondition was not `True`, so the
@@ -153,7 +155,8 @@ class WPCBugRegressionTest {
               p := &a;
               a := a + 1;
             post: (a = 3)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
 
   @Test
@@ -171,7 +174,8 @@ class WPCBugRegressionTest {
               p := &b;
               *p := 5;
             post: (a = 0)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
 
   @Test
@@ -191,7 +195,8 @@ class WPCBugRegressionTest {
                 *p := 5;
               };
             post: (a = 0)
-            """.trimIndent()))
+            """
+                .trimIndent()))
   }
 
   // -- Bug 4: `wpc(While)` does not validate the loop body --------------------
@@ -199,8 +204,10 @@ class WPCBugRegressionTest {
 
   @Test
   fun bug4_brokenLoopInvariant_weakestPreconditionIsNull() {
-    val context = Parser().parse(
-        """
+    val context =
+        Parser()
+            .parse(
+                """
         vars:
           int x;
         code:
@@ -209,7 +216,8 @@ class WPCBugRegressionTest {
             x := x + 1;
           };
         post: (x = 3)
-        """.trimIndent())
+        """
+                    .trimIndent())
     val output = Output()
     output.log = false
     assertNull(
@@ -220,8 +228,10 @@ class WPCBugRegressionTest {
   @Test
   fun bug4_validLoopInvariant_weakestPreconditionIsNonNull() {
     // A valid invariant yields a non-null weakest precondition.
-    val context = Parser().parse(
-        """
+    val context =
+        Parser()
+            .parse(
+                """
         vars:
           int x;
         code:
@@ -230,7 +240,8 @@ class WPCBugRegressionTest {
             x := x + 1;
           };
         post: (true)
-        """.trimIndent())
+        """
+                    .trimIndent())
     val output = Output()
     output.log = false
     assertTrue(
@@ -260,11 +271,12 @@ class WPCBugRegressionTest {
     val numVars = random.nextInt(1, 4)
     val names = (0 until numVars).map { "v$it" }
     val numStmts = random.nextInt(3, 8)
-    val code = (0 until numStmts).map { _ ->
-      val t = names[random.nextInt(numVars)]
-      val expr = genExpr(random, names, random.nextInt(0, 3))
-      return@map "$t := $expr;"
-    }
+    val code =
+        (0 until numStmts).map { _ ->
+          val t = names[random.nextInt(numVars)]
+          val expr = genExpr(random, names, random.nextInt(0, 3))
+          return@map "$t := $expr;"
+        }
     val vars = names.joinToString("\n") { "int $it;" }
     return Triple(vars, code.joinToString("\n"), names[random.nextInt(numVars)])
   }
@@ -279,7 +291,8 @@ class WPCBugRegressionTest {
       val observed = interpValue(prog, target)
       val status = proofStatus("$prog\npost: ($target = $observed)")
       if (status != VerificationStatus.SAFE) {
-        failures.add("[$i] target=$target observed=$observed status=$status\nvars:\n$vars\ncode:\n$code")
+        failures.add(
+            "[$i] target=$target observed=$observed status=$status\nvars:\n$vars\ncode:\n$code")
       }
     }
     assertTrue(

@@ -24,11 +24,10 @@ import java.time.Duration
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.DynamicTest.dynamicTest
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
-import org.junit.jupiter.api.Disabled
 import tools.aqua.wvm.analysis.VerificationResult
 import tools.aqua.wvm.analysis.VerificationStatus
 import tools.aqua.wvm.machine.Output
@@ -40,7 +39,6 @@ import tools.aqua.wvm.parser.Parser
  *
  * The list file is the single source of truth for each example's expected verdict, one line per
  * example:
- *
  * ```
  * relative/path/to/example.w <safe|unsafe|unknown>
  * ```
@@ -59,7 +57,8 @@ class WPCExamplesTest {
 
   private val examplesDirectory = Path.of("examples")
 
-  private val listFile get() = examplesDirectory.resolve("examples-list-verification.txt")
+  private val listFile
+    get() = examplesDirectory.resolve("examples-list-verification.txt")
 
   private fun fromToken(token: String): VerificationStatus? =
       when (token.lowercase()) {
@@ -79,8 +78,11 @@ class WPCExamplesTest {
         "examples-list.txt line ${index + 1} must be '<path> <safe|unsafe|unknown>': '$line'"
       }
       val (path, token) = fields
-      val status = fromToken(token) ?: error("examples-list.txt line ${index + 1}: unknown verdict '$token'")
-      check(expectations.put(path, status) == null) { "Duplicate entry for '$path' in examples-list.txt" }
+      val status =
+          fromToken(token) ?: error("examples-list.txt line ${index + 1}: unknown verdict '$token'")
+      check(expectations.put(path, status) == null) {
+        "Duplicate entry for '$path' in examples-list.txt"
+      }
     }
     check(expectations.isNotEmpty()) { "examples-list.txt lists no examples" }
     return expectations
@@ -123,7 +125,10 @@ class WPCExamplesTest {
     check(disk.isNotEmpty()) { "No .w examples found under $examplesDirectory" }
 
     val testableExamples =
-        disk.filter { expectations[it] in setOf(VerificationStatus.SAFE, VerificationStatus.UNSAFE, VerificationStatus.UNKNOWN) }
+        disk.filter {
+          expectations[it] in
+              setOf(VerificationStatus.SAFE, VerificationStatus.UNSAFE, VerificationStatus.UNKNOWN)
+        }
 
     return testableExamples.map { relative ->
       dynamicTest(relative) {
