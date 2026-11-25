@@ -22,6 +22,17 @@ import tools.aqua.wvm.language.Type
 
 data class Scope(internal val symbols: Map<String, ElementInfo>, val size: Int) {
 
+  companion object {
+    const val MAX_MEMORY_SIZE = 10_000
+  }
+
+  init {
+    if (size < 0 || size > MAX_MEMORY_SIZE) {
+      throw IllegalArgumentException(
+          "Memory limit exceeded: requested $size cells (max $MAX_MEMORY_SIZE).")
+    }
+  }
+
   data class ElementInfo(val type: Type, val address: Int, val size: Int)
 
   fun resolve(name: String): Int =

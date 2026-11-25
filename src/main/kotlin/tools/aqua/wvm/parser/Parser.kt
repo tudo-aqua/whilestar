@@ -287,9 +287,14 @@ class Parser(restricted: Boolean = false) {
 
   private val typeSize =
       (lsbr * numeral * rsbr).map { results: List<Any> ->
-        Pair(
-            (results[1] as String).toInt() + 1, /* +1 for the pointer to the data */
-            Pointer(BasicType.INT))
+        val len =
+            (results[1] as String).toIntOrNull()
+                ?: throw IllegalArgumentException("Array size too large: ${results[1]}")
+        if (len >= Scope.MAX_MEMORY_SIZE) {
+          throw IllegalArgumentException(
+              "Array size $len exceeds max memory size (${Scope.MAX_MEMORY_SIZE}).")
+        }
+        Pair(len + 1, /* +1 for the pointer to the data */ Pointer(BasicType.INT))
       } + star.star().map { results: List<Any> -> Pair(1, buildType(results.size)) }
 
   private val decl =
@@ -308,6 +313,10 @@ class Parser(restricted: Boolean = false) {
     for (e in entries) {
       info[e.first] = Scope.ElementInfo(e.second.second, addr, e.second.first)
       addr += e.second.first
+      if (addr > Scope.MAX_MEMORY_SIZE) {
+        throw IllegalArgumentException(
+            "Memory limit exceeded: requested $addr cells (max ${Scope.MAX_MEMORY_SIZE}).")
+      }
     }
     return Scope(info, addr)
   }

@@ -18,7 +18,9 @@
 
 package tools.aqua.wvm.parser
 
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import tools.aqua.wvm.machine.Scope
 
 class ParserTest {
 
@@ -44,5 +46,21 @@ code:
     println(ctx)
     ctx.execute(true)
     // println(Json.encodeToString(ctx.cfg))
+  }
+
+  @Test
+  fun testRejectsOversizedArray() {
+    assertThrows(IllegalArgumentException::class.java) {
+      Parser().parse("vars:\n  int[${Scope.MAX_MEMORY_SIZE}] a;\ncode:\n")
+    }
+    assertThrows(IllegalArgumentException::class.java) {
+      Parser().parse("vars:\n  int[99999999999999] a;\ncode:\n")
+    }
+    assertThrows(IllegalArgumentException::class.java) {
+      Parser().parse("vars:\n  int[6000] a;\n  int[6000] b;\ncode:\n")
+    }
+    assertThrows(IllegalArgumentException::class.java) {
+      Scope(emptyMap(), Scope.MAX_MEMORY_SIZE + 1)
+    }
   }
 }
