@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import tools.aqua.konstraints.smt.SatStatus
+import tools.aqua.wvm.analysis.VerificationStatus
 import tools.aqua.wvm.analysis.hoare.SMTSolver
 import tools.aqua.wvm.analysis.hoare.WPCProofSystem
 import tools.aqua.wvm.analysis.inductiveVerification.BMCSafetyChecker
@@ -182,7 +183,7 @@ class BugFixTest {
             post: (a[i] = 0)
             """)
     // a[1] is untouched; a prover that leaves i unsubstituted reads a[0], which is 5
-    assertTrue(system.proof())
+    assertEquals(VerificationStatus.SAFE, system.proof().status)
   }
 
   private fun proof(source: String) = WPCProofSystem(parse(source), Output())
@@ -218,8 +219,14 @@ class BugFixTest {
             code:
             post: (b = 1)
             """)
-    assertTrue(KInductionChecker(context).check(), "k-induction should prove the program safe")
-    assertFalse(BMCSafetyChecker(context).check(), "BMC should not find a counterexample")
+    assertEquals(
+        VerificationStatus.SAFE,
+        KInductionChecker(context).check().status,
+        "k-induction should prove the program safe")
+    assertEquals(
+        VerificationStatus.UNKNOWN,
+        BMCSafetyChecker(context).check().status,
+        "bounded checking without a counterexample is not an unbounded proof")
   }
 
   // --- the proof system crashed with a third extern statement ---------------------------------
@@ -240,7 +247,7 @@ class BugFixTest {
               extern z 0 .. 5;
             post: (true)
             """)
-    assertTrue(system.proof())
+    assertEquals(VerificationStatus.SAFE, system.proof().status)
   }
 
   // --- a model with a constant array made the proof system fail --------------------------------
@@ -254,8 +261,9 @@ class BugFixTest {
     val result = SMTSolver().solve(expr)
     assertEquals(SatStatus.SAT, result.status)
     assertFalse(result.modelAvailable)
-    // the model could not be read, so the query was posed once more without one
-    assertEquals(2, SMTSolver.numberOfSMTCalls)
+    assertTrue(result.modelText().contains("M_"), result.modelText())
+    assertFalse(result.modelText().contains("model not representable"), result.modelText())
+    assertEquals(1, SMTSolver.numberOfSMTCalls)
     SMTSolver.resetCallCounters()
   }
 
