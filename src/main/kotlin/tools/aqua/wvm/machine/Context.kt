@@ -33,12 +33,27 @@ data class Context(
     val post: BooleanExpression = True,
     var input: Scanner? = null
 ) {
-  fun execute(verbose: Boolean, output: Output = Output(), maxSteps: Int = -1): List<StatementApp> {
+  companion object {
+    const val DEFAULT_TIMEOUT_MS = 5_000L
+  }
+
+  fun execute(
+      verbose: Boolean,
+      output: Output = Output(),
+      maxSteps: Int = -1,
+      timeoutMs: Long = DEFAULT_TIMEOUT_MS
+  ): List<StatementApp> {
     var cfg = Configuration(SequenceOfStatements(program), scope, initMemForScope())
     var trace = listOf<StatementApp>()
     var stepCount = 0
+    val startTime = System.nanoTime()
+    val timeoutNs = timeoutMs * 1_000_000L
     if (verbose) println(cfg)
     while (!cfg.isFinal()) {
+      if ((timeoutMs > 0 && System.nanoTime() - startTime > timeoutNs) ||
+          Thread.currentThread().isInterrupted) {
+        throw IllegalStateException("Execution timed out after ${timeoutMs} ms.")
+      }
       stepCount++
       if (maxSteps in 1 ..< stepCount) {
         output.println("Terminated after ${maxSteps} steps.")
